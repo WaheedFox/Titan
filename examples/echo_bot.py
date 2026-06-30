@@ -6,7 +6,7 @@ bot = Titan(token=os.environ["BOT_TOKEN"])
 
 @bot.command("start")
 async def on_start(ctx):
-    await ctx.reply(f"Hello, {ctx.sender.first_name}.")
+    await ctx.reply(f"Hello, {ctx.sender.first_name or 'there'}.")
 
 
 @bot.command("help")

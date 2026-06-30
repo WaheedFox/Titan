@@ -52,6 +52,8 @@ bot.banned_users.add(user_id)
 bot.banned_users.discard(user_id)
 ```
 
+This set is held in memory and resets on every restart. Titan does not persist it. If your ban list must survive restarts, serialize it to a file or database on shutdown and reload it on startup.
+
 ### `bot.telegram`
 
 Access point for the Telegram adapter. Use it for operations that fall outside the update-response cycle — sending to arbitrary chats, media, pinning, bot configuration.

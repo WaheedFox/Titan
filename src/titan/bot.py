@@ -70,6 +70,7 @@ class Titan:
         self.middleware_chain = MiddlewareChain()
         self.banned_users: set[int] = set()
         self._error_handler: ErrorHandler | None = None
+        self._included_routers: set[int] = set()
 
         self.offset: int = 0
 
@@ -194,12 +195,15 @@ class Titan:
         - commands → bot.commands
         - callback_handlers → bot.callback_handlers
 
-        يرمي TitanError عند تعارض في command أو callback_data.
-
-        تحذير: استدعاء include() على نفس الـ Router مرتين يُضاعف handlers
-        المسجلة عبر on() بصمت دون خطأ. commands وcallbacks محمية من التكرار،
-        لكن on() handlers ليست كذلك. كل router يجب أن يُدمج مرة واحدة فقط.
+        يرمي TitanError عند تعارض في command أو callback_data،
+        أو إذا تم تمرير نفس الـ Router مرتين.
         """
+
+        if id(router) in self._included_routers:
+            raise TitanError(
+                "This router has already been included. "
+                "Each Router instance can only be passed to bot.include() once."
+            )
 
         for event, handlers in router.handlers.items():
             self.handlers.setdefault(event, []).extend(handlers)
@@ -219,6 +223,8 @@ class Titan:
                     "Each callback_data value can only have one handler."
                 )
             self.callback_handlers[data] = handler
+
+        self._included_routers.add(id(router))
 
     def callback(self, data: str):
         """

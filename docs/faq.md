@@ -90,6 +90,50 @@ The error makes the conflict explicit and locates it at registration time, befor
 
 ---
 
+## My ban list disappears every time the bot restarts. How do I fix that?
+
+`bot.banned_users` is a plain Python `set[int]` held in memory. Titan does not persist it — persistence is your application's responsibility.
+
+To survive restarts, save the set before shutdown and load it on startup:
+
+```python
+import json, pathlib
+
+BAN_FILE = pathlib.Path("banned.json")
+
+if BAN_FILE.exists():
+    bot.banned_users = set(json.loads(BAN_FILE.read_text()))
+
+@bot.command("ban")
+async def on_ban(ctx):
+    bot.banned_users.add(ctx.user_id)
+    BAN_FILE.write_text(json.dumps(list(bot.banned_users)))
+```
+
+---
+
+## Telegram is returning rate limit errors. What should I do?
+
+Titan does not retry automatically. Rate limit errors arrive as `TelegramError` and are routed to your error handler.
+
+Handle them there, or use a middleware wrapper for outgoing calls that are likely to burst:
+
+```python
+import asyncio
+from titan import TelegramError
+
+@bot.error_handler
+async def on_error(ctx, exc):
+    if isinstance(exc, TelegramError) and "429" in str(exc):
+        await asyncio.sleep(1)
+    else:
+        raise exc
+```
+
+Telegram's limits are 30 messages per second globally and 1 message per second per chat. If your bot sends to many chats in a short period, throttle the outgoing calls in your application logic rather than relying on error recovery.
+
+---
+
 ## My middleware is not running for bot.telegram calls. Is that expected?
 
 Yes. `bot.telegram` is a direct adapter to Telegram's API. It has no relationship to the update-response cycle — no `ctx`, no middleware chain, no routing.
