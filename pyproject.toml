@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "titanx"
+authors = [
+    {name = "Waheed"},
+]
+version = "1.0.0a2"
+description = "A simple and modern async framework for building Telegram bots"
+readme = "README.md"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+keywords = ["telegram", "bot", "framework", "async"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Communications :: Chat",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/WaheedFox/Titan"
+Issues = "https://github.com/WaheedFox/Titan/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,316 @@
+Architectural Discussion — Project Health
+
+التحقيق جيد، لكن أعتقد أن هناك قراراً واحداً يحل نصف الأسئلة مباشرة:
+
+أولاً — الحدود مع Interactive Inspector
+
+الفرق بينهما يجب أن يكون صارماً:
+
+Interactive Inspector
+
+يجيب:
+
+> ماذا يوجد داخل Titan الآن؟
+
+أمثلة:
+
+كم عدد الـ handlers؟
+
+ما هي الأوامر؟
+
+ما هي الـ middleware؟
+
+ما هي الـ capabilities؟
+
+ما هي الـ routers؟
+
+
+هو مرآة.
+
+
+---
+
+Project Health
+
+يجيب:
+
+> هل ما يوجد يبدو سليماً؟
+
+
+
+أمثلة:
+
+لا handlers.
+
+لا error handler.
+
+inline capability بدون inline handler.
+
+callback handlers غير قابلة للوصول.
+
+command مسجل لكن لا يوجد أي event آخر.
+
+
+هو طبيب.
+
+
+---
+
+Inspector لا يصدر أحكاماً.
+
+Health لا يعرض كل شيء.
+
+إذا بدأ Inspector بإصدار تحذيرات أصبح Health. وإذا بدأ Health بعرض كل شيء أصبح Inspector.
+
+إذن لا يوجد تداخل حقيقي.
+
+
+---
+
+ثانياً — الأولوية
+
+أرى أن الأولوية:
+
+المرحلة الأولى:
+
+Structural checks فقط (pre-run)
+
+لأنها:
+
+لا تحتاج Telegram.
+
+deterministic.
+
+سهلة الاختبار.
+
+تنطبق حتى على CI.
+
+تنطبق حتى على Migration Assistant مستقبلاً.
+
+
+
+---
+
+المرحلة الثانية:
+
+Runtime checks (post-run)
+
+مثل:
+
+capabilities mismatch
+
+BotFather settings mismatch
+
+privacy mode warnings
+
+
+
+---
+
+المرحلة الثالثة (ربما مستقبلاً):
+
+Deep logical analysis
+
+مثل:
+
+unreachable callback handlers.
+
+
+هذه قد تحتاج Design Linter أو Static Analysis.
+
+ولا أعتقد أنها من مسؤولية Project Health v1.
+
+
+---
+
+ثالثاً — Core أم Extra؟
+
+أرى أنها:
+
+Core.
+
+ليس Extra.
+
+لماذا؟
+
+لأن المشكلة عامة جداً.
+
+كل مطور Telegram تقريباً يستفيد منها.
+
+والتكلفة صغيرة جداً.
+
+والميزة لا تضيف مفهوماً جديداً.
+
+هي مجرد:
+
+> "قيّم حالة البوت."
+
+
+
+مثل:
+
+bot.health()
+
+هذا مفهوم بديهي جداً.
+
+
+---
+
+رابعاً — كيف تُعاد النتائج؟
+
+أرفض:
+
+logger فقط
+
+warnings فقط
+
+side effects فقط
+
+
+لأنها تمنع الأدوات الأخرى من الاستفادة.
+
+
+---
+
+أرى أن:
+
+findings = bot.health()
+
+هو العقد الأساسي.
+
+ثم:
+
+bot.run(debug=True)
+
+يمكنه طباعتها.
+
+Migration Assistant يمكنه قراءتها.
+
+Architect AI يمكنه قراءتها.
+
+Project Health UI مستقبلاً يمكنه قراءتها.
+
+
+---
+
+إذن:
+
+API تعيد البيانات. الطباعة مجرد مستهلك لهذه البيانات.
+
+
+---
+
+خامساً — هل يوجد Severity؟
+
+نعم.
+
+وبقوة.
+
+لكن لا نبالغ.
+
+ثلاثة مستويات تكفي:
+
+INFO
+WARNING
+ERROR
+
+
+---
+
+أمثلة:
+
+INFO
+
+No middleware registered.
+
+قد يكون مقصوداً.
+
+
+---
+
+WARNING
+
+No error handler registered.
+
+غالباً خطأ.
+
+
+---
+
+ERROR
+
+Bot has no handlers.
+
+البوت لا يفعل شيئاً.
+
+
+---
+
+أرفض:
+
+CRITICAL
+
+DEBUG
+
+HEALTH_SCORE
+
+percentages
+
+
+هذه تتحول بسرعة إلى نظام مراقبة كامل.
+
+
+---
+
+الحل الأدنى (MVP)
+
+أرى أن النسخة الأولى يجب أن تكون فقط:
+
+findings = bot.health()
+
+وتفحص:
+
+1. No handlers.
+
+
+2. No error handler.
+
+
+3. supports_inline_queries=True without inline handler.
+
+
+4. can_join_groups=True without any group-related handlers.
+
+
+5. privacy mode disabled but no group handlers.
+
+
+
+فقط.
+
+
+---
+
+لا:
+
+callback reachability.
+
+static code analysis.
+
+file scanning.
+
+import inspection.
+
+AST.
+
+
+
+---
+
+فلسفياً
+
+أرى أن Project Health تحقق مبدأ Titan الجميل:
+
+> "اجعل المطور يكتشف المشكلة قبل أن يكتشفها المستخدم."
+
+وهذا وحده يجعلها تستحق أن تكون Core.
