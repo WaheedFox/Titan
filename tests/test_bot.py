@@ -472,16 +472,16 @@ class TestStartupGetMeFailure:
 
     @pytest.mark.asyncio
     async def test_get_me_failure_emits_warning(self):
+        # patch the module-level _log directly — logging.getLogger() runs at
+        # import time, so patching it after the fact has no effect on _log.
         bot = self._make_bot_failing_get_me()
-        with patch("logging.getLogger") as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
+        with patch("titan.bot._log") as mock_log:
             try:
                 await asyncio.wait_for(bot.run_async(), timeout=2.0)
             except (asyncio.TimeoutError, RuntimeError):
                 pass
             warning_calls = [
-                call for call in mock_logger.warning.call_args_list
+                call for call in mock_log.warning.call_args_list
                 if "startup" in call[0][0]
             ]
             assert warning_calls, "expected a startup warning to be logged"

@@ -20,6 +20,8 @@ import asyncio
 import logging
 from typing import Any, Callable, Awaitable
 
+_log = logging.getLogger("titan")
+
 from titan.errors import TitanError
 from titan.telegram import Telegram
 from titan.update import Update
@@ -57,7 +59,7 @@ class Titan:
     # Logging
     # -------------------------
     def _log(self, msg: str) -> None:
-        logging.getLogger("titan").info(msg)
+        _log.info(msg)
 
     async def _handle_error(self, ctx: Context, exc: Exception) -> None:
         if self._error_handler is not None:
@@ -667,7 +669,7 @@ class Titan:
             # (تحقيق: docs/internal/investigations/api-evolution-unknown-types.md)
             raw_msg = update.get_message()
             if raw_msg is None:
-                logging.getLogger("titan").debug(
+                _log.debug(
                     "Update with no route dropped (unsupported or unknown type): "
                     "update_id=%s",
                     raw_update.get("update_id"),
@@ -792,7 +794,7 @@ class Titan:
             username = me.get("username", "unknown")
             self._log(f"Running as @{username}")
         except Exception as exc:
-            logging.getLogger("titan").warning(
+            _log.warning(
                 "Could not fetch bot identity at startup: %s — continuing.", exc
             )
 
