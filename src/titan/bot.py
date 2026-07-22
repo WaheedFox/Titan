@@ -661,15 +661,26 @@ class Titan:
                     await self._dispatch("callback", ctx)
                 return
 
-            # semantic event aliases — قبل dispatch الرسائل العامة
+            # update with no route — unsupported or unknown type.
+            # سياسة صريحة: لا handler، لا خطأ، لا أثر على polling.
+            # المسؤولية تعيش هنا في dispatch، لا في طبقة الترجمة.
+            # (تحقيق: docs/internal/investigations/api-evolution-unknown-types.md)
             raw_msg = update.get_message()
-            if raw_msg:
-                if raw_msg.get("new_chat_members"):
-                    await self._dispatch("new_member", ctx)
-                    return
-                if raw_msg.get("left_chat_member"):
-                    await self._dispatch("left_member", ctx)
-                    return
+            if raw_msg is None:
+                logging.getLogger("titan").debug(
+                    "Update with no route dropped (unsupported or unknown type): "
+                    "update_id=%s",
+                    raw_update.get("update_id"),
+                )
+                return
+
+            # semantic event aliases
+            if raw_msg.get("new_chat_members"):
+                await self._dispatch("new_member", ctx)
+                return
+            if raw_msg.get("left_chat_member"):
+                await self._dispatch("left_member", ctx)
+                return
 
             # message / command
             text = update.text

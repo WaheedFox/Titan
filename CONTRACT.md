@@ -153,6 +153,16 @@ Rules:
 
 Semantic events must not overlap with message handler.
 
+### Unrouted Updates
+
+Updates that Titan does not recognise as any of its supported event types are silently dropped.
+
+- They are not passed to any handler — including `on("message")`.
+- They are not treated as errors and do not invoke the error handler.
+- They do not affect polling or the update offset.
+
+This applies equally to update types that are *unsupported* (known to Telegram but not yet routed by Titan) and *unknown* (added by Telegram after this version was built).
+
 ---
 
 # 5. Registration Rules

@@ -338,6 +338,125 @@ class TestHandleUpdate:
         }
         await self.bot._handle_update(raw)
 
+    # ------------------------------------------------------------------
+    # Unrouted updates — CONTRACT §4 (Unrouted Updates)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_unsupported_update_type_does_not_reach_message_handler(self):
+        """
+        update من نوع معروف في Telegram لكن غير مدعوم في Titan (مثل poll)
+        لا يجب أن يصل لأي message handler.
+
+        العقد: update بلا route → لا handler يُستدعى.
+        """
+        calls = []
+
+        @self.bot.on("message")
+        async def h(ctx):
+            calls.append("message")
+
+        raw = {
+            "update_id": 10,
+            "poll": {
+                "id": "poll1",
+                "question": "اختر",
+                "options": [{"text": "أ"}, {"text": "ب"}],
+                "total_voter_count": 0,
+                "is_closed": False,
+                "is_anonymous": True,
+                "type": "regular",
+                "allows_multiple_answers": False,
+            },
+        }
+        await self.bot._handle_update(raw)
+        assert calls == [], (
+            "poll update (unsupported type) must not reach on('message') handlers"
+        )
+
+    @pytest.mark.asyncio
+    async def test_unknown_update_type_does_not_reach_message_handler(self):
+        """
+        update من نوع أضافه Telegram بعد بناء هذا الإصدار (مثل message_reaction)
+        لا يجب أن يصل لأي message handler.
+
+        العقد: update بلا route → لا handler يُستدعى.
+        """
+        calls = []
+
+        @self.bot.on("message")
+        async def h(ctx):
+            calls.append("message")
+
+        raw = {
+            "update_id": 11,
+            "message_reaction": {
+                "chat": {"id": 1, "type": "supergroup"},
+                "message_id": 42,
+                "user": {"id": 99, "first_name": "Ali"},
+                "new_reaction": [{"type": "emoji", "emoji": "👍"}],
+                "old_reaction": [],
+            },
+        }
+        await self.bot._handle_update(raw)
+        assert calls == [], (
+            "message_reaction update (unknown type) must not reach on('message') handlers"
+        )
+
+    @pytest.mark.asyncio
+    async def test_unrouted_update_does_not_trigger_error_handler(self):
+        """
+        update بلا route لا يُعامَل كخطأ — error handler لا يُستدعى.
+
+        العقد: update بلا route → لا خطأ، لا error handler.
+        """
+        errors = []
+
+        @self.bot.error_handler
+        async def on_error(ctx, exc):
+            errors.append(exc)
+
+        raw = {
+            "update_id": 12,
+            "poll_answer": {
+                "poll_id": "poll1",
+                "user": {"id": 99, "first_name": "Ali"},
+                "option_ids": [0],
+            },
+        }
+        await self.bot._handle_update(raw)
+        assert errors == [], (
+            "unrouted update must not invoke error_handler"
+        )
+
+    @pytest.mark.asyncio
+    async def test_unrouted_update_does_not_affect_real_message_routing(self):
+        """
+        regression: update بلا route لا يؤثر على routing الرسائل العادية.
+        رسالة حقيقية تصل بعد unknown update يجب أن تُعالَج بشكل طبيعي.
+        """
+        calls = []
+
+        @self.bot.on("message")
+        async def h(ctx):
+            calls.append("message")
+
+        unknown_raw = {"update_id": 20, "message_reaction": {"chat": {"id": 1}}}
+        real_raw = {
+            "update_id": 21,
+            "message": {
+                "message_id": 5,
+                "text": "hello",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "private"},
+            },
+        }
+        await self.bot._handle_update(unknown_raw)
+        await self.bot._handle_update(real_raw)
+        assert calls == ["message"], (
+            "real message after unknown update must still reach on('message') handler"
+        )
+
 
 class TestStartupGetMeFailure:
     """SF-06: فشل get_me() عند startup يُصدر warning ولا يوقف التشغيل."""
