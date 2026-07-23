@@ -66,9 +66,9 @@ class Titan:
             try:
                 await self._error_handler(ctx, exc)
             except Exception as inner:
-                self._log(f"Exception raised inside error handler: {inner}")
+                _log.error("Exception raised inside error handler", exc_info=inner)
         else:
-            self._log(f"Unhandled exception: {exc}")
+            _log.error("Unhandled exception", exc_info=exc)
 
     @property
     def router_count(self) -> int:

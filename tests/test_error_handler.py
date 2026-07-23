@@ -388,10 +388,10 @@ class TestErrorHandlerContract:
         async def bad(ctx):
             raise RuntimeError("unhandled")
 
-        with patch.object(self.bot, "_log") as mock_log:
+        with patch("titan.bot._log") as mock_log:
             await self.bot._handle_update(RAW_MESSAGE)
-            assert mock_log.called
-            logged_message = mock_log.call_args[0][0]
+            assert mock_log.error.called
+            logged_message = mock_log.error.call_args[0][0]
             assert "Unhandled exception" in logged_message
 
     @pytest.mark.asyncio
@@ -408,10 +408,10 @@ class TestErrorHandlerContract:
         async def bad(ctx):
             raise RuntimeError("original error")
 
-        with patch.object(self.bot, "_log") as mock_log:
+        with patch("titan.bot._log") as mock_log:
             await self.bot._handle_update(RAW_MESSAGE)  # must not raise
-            assert mock_log.called
-            logged_message = mock_log.call_args[0][0]
+            assert mock_log.error.called
+            logged_message = mock_log.error.call_args[0][0]
             assert "error handler" in logged_message.lower()
 
     @pytest.mark.asyncio

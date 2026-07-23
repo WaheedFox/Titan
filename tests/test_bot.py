@@ -339,6 +339,82 @@ class TestHandleUpdate:
         await self.bot._handle_update(raw)
 
     # ------------------------------------------------------------------
+    # Fallback logging — Investigation #3 (Error Handling & Propagation)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_fallback_logs_with_exc_info_when_no_error_handler(self):
+        """
+        عندما لا يُسجَّل error handler، يجب أن يُسجَّل الاستثناء مع exc_info
+        حتى يتمكن المطور من تحديد موضع الخطأ في كوده.
+
+        العقد: لا error handler مسجَّل → _log.error مع exc_info يحتوي الاستثناء.
+        """
+        @self.bot.command("crash")
+        async def h(ctx):
+            raise RuntimeError("boom")
+
+        raw = {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "text": "/crash",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "private"},
+            },
+        }
+
+        with patch("titan.bot._log") as mock_log:
+            await self.bot._handle_update(raw)
+
+        calls = mock_log.error.call_args_list
+        assert calls, "expected _log.error to be called"
+        # exc_info يجب أن يكون الاستثناء نفسه — لا None، لا False
+        exc_info = calls[0].kwargs.get("exc_info") or (
+            calls[0].args[1] if len(calls[0].args) > 1 else None
+        )
+        assert exc_info is not None, (
+            "fallback must log with exc_info so the traceback is preserved"
+        )
+
+    @pytest.mark.asyncio
+    async def test_inner_exception_in_error_handler_logs_with_exc_info(self):
+        """
+        عندما يرمي error handler نفسه استثناءً، يجب أن يُسجَّل مع exc_info.
+
+        العقد: استثناء داخل error handler → _log.error مع exc_info يحتوي الاستثناء.
+        """
+        @self.bot.error_handler
+        async def on_error(ctx, exc):
+            raise RuntimeError("error handler crashed")
+
+        @self.bot.command("crash")
+        async def h(ctx):
+            raise RuntimeError("original")
+
+        raw = {
+            "update_id": 2,
+            "message": {
+                "message_id": 2,
+                "text": "/crash",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "private"},
+            },
+        }
+
+        with patch("titan.bot._log") as mock_log:
+            await self.bot._handle_update(raw)
+
+        calls = mock_log.error.call_args_list
+        assert calls, "expected _log.error to be called"
+        exc_info = calls[0].kwargs.get("exc_info") or (
+            calls[0].args[1] if len(calls[0].args) > 1 else None
+        )
+        assert exc_info is not None, (
+            "inner exception in error handler must log with exc_info"
+        )
+
+    # ------------------------------------------------------------------
     # Unrouted updates — CONTRACT §4 (Unrouted Updates)
     # ------------------------------------------------------------------
 
