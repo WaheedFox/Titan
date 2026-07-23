@@ -26,21 +26,23 @@ PTB بنى نظام `Filters` — كائنات قابلة للتركيب بـ `&
 
 ## 2. الجذر المعماري في PTB وaiogram
 
-### نموذج الـ routing الأصلي
+### نموذج الـ dispatch — الفارق الحقيقي
 
-كلا الإطارين بدآ بنموذج مشابه لـ Titan: routing بنوع الحدث (message, callback, etc). المطورون البسطاء اكتفوا بهذا. لكن مع نمو البوتات ظهر ضغط حقيقي:
+الشرط داخل الـ handler ليس الجذر. هو عَرَض لمشكلة أعمق تتصل بنموذج الـ dispatch نفسه.
 
-- بوت يخدم قنوات ومجموعات وخاصاً في آن واحد — كل سياق له سلوك مختلف.
-- بوت يتعامل مع محتوى متعدد الأنواع — نص، صورة، ملف، استطلاع.
-- بوت يقيّد وصول handlers لمستخدمين أو أدوار معينة.
+**PTB وaiogram يعتمدان first-match exclusive dispatch:** عند وصول update، يُفحص كل handler مسجَّل بالترتيب، ويُشغَّل **الأول الذي يطابق** ثم يتوقف التسلسل. بدون predicates عند التسجيل، الأداة لا تستطيع أن تُقرِّر "مَن يمتلك هذا الـ update" — أي لا يمكنها تطبيق الـ exclusivity.
 
-**الجذر:** routing layer يعرف فقط *نوع الحدث* يُجبر كل منطق تمييز المحتوى والسياق على الانتقال داخل جسم الـ handler. مع تعدد الـ handlers يصبح كل handler يحمل قسماً من منطق الـ routing — وينتشر هذا المنطق بدلاً من تمركزه.
+Filters في هذا النموذج ليست ميزة إضافية — هي **شرط ضروري** لتشغيل نموذج first-match. بدونها، كل handler يتلقى كل update، وهذا ليس ما أراده الإطاران.
+
+### الجانب الثاني — scoping تنظيمي على نطاق Router
+
+aiogram بنى فوق Filters ما هو أوسع: `@router.message(F.chat.type == "group")` يُحدّد نطاق **router كامل** لا handler منفرد فقط. هذا يتيح وجود router مختص بالمجموعات وآخر بالخاص، كل منهما بـ middleware وسلوك مختلف. الـ Filters هنا أداة لحل مشكلة middleware granularity، لا الـ routing بحد ذاتها.
 
 ### ما أنتجه هذا في PTB وaiogram
 
-- **PTB Filters:** كائنات predicates تُركَّب وتُسجَّل مع الـ handler: `@app.message(filters.TEXT & filters.Regex(r"\d+"))`. الـ routing يبقى في طبقة التسجيل.
-- **aiogram Magic Filters:** `@router.message(F.chat.type.in_({"group", "supergroup"}))`. نفس الفكرة بـ API أكثر إيجازاً.
-- **التكلفة:** كلا النظامين أضافا تعقيداً معمارياً واضحاً — DSL كامل للفلترة، evaluation chain عند كل update، توثيق موسّع، إمكانية Filters متضاربة.
+- **PTB Filters:** predicates ضرورية لتشغيل نموذج first-match. `@app.message(filters.TEXT & filters.Regex(r"\d+"))` تُخبر الأداة "هذا الـ handler مسؤول عن النصوص المطابقة فقط" حتى يمكنها تجاوزه للـ handler التالي إذا لم تتحقق الشروط.
+- **aiogram Magic Filters:** `@router.message(F.chat.type.in_({"group", "supergroup"}))` يحدد نطاق router — وهذا حل لمشكلة عزل الـ middleware، تُوظَّف فيه الـ Filters كأداة.
+- **التكلفة:** DSL كامل، evaluation chain عند كل update، توثيق موسّع، إمكانية تعارض بين Filters.
 
 ---
 
