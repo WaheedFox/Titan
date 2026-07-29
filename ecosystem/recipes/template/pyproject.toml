@@ -1,0 +1,30 @@
+# قالب pyproject.toml لوصفة Titan مجتمعية
+# استبدل <name> باسم وصفتك (مثال: antiflood، ratelimit، spam-guard)
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "titan-recipe-<name>"
+version = "0.1.0"
+description = "وصف مختصر لما تفعله الوصفة"
+requires-python = ">=3.10"
+dependencies = ["titan>=1.0,<2.0"]
+
+# اتفاقية التسمية الرسمية:
+#   اسم الحزمة  → titan-recipe-<name>
+#   اسم الاستيراد → titan_recipe_<name>
+# الالتزام بهذه الاتفاقية يجعل وصفتك قابلة للاكتشاف عبر:
+#   pip search titan-recipe   أو   PyPI: titan-recipe
+
+# ─────────────────────────────────────────────────────────
+# [tool.titan-recipe] اختياري تماماً.
+# أضفه إذا أردت أن تكون وصفتك قابلة للاكتشاف بواسطة أدوات
+# أو قوائم مجتمعية مستقبلية. ليس شرطاً للعمل أو النشر.
+#
+# [tool.titan-recipe]
+# titan-compatibility = ">=1.0,<2.0"
+# events = ["message"]          # أحداث Titan التي تعالجها الوصفة
+# recipe-type = "handler"       # handler | middleware-compatible | utility
+# ─────────────────────────────────────────────────────────

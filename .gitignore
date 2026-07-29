@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+src/*.egg-info/
+*.egg-info/
+
+# Package managers
+uv.lock
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+
+# System
+.DS_Store
+Thumbs.db
+
+# Replit
+.cache/
+.local/
+.pythonlibs/
+.agents/
+.npmrc
+.replitignore
+.replit
+.titan/
