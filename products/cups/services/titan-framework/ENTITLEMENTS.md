@@ -8,6 +8,7 @@
 
 **المكتبة نفسها — `pip install titan-lib` — مجانية دائماً.**
 ما يُفتح بالاشتراك هو **طبقة الأدوات المحيطة**: أدوات المطور، أدوات الفريق، أدوات الإنتاج.
+
 الفرق: Titan يعمل للجميع. CUPS يُفتح مستويات عمل أعلى.
 
 ---
@@ -29,8 +30,39 @@
 | `titan.recipes.welcome` | الوصفة الأساسية |
 | `titan.validation` | التحقق من صحة الـ handlers |
 | `titan.lifecycle` | إدارة polling والإيقاف الآمن |
-| `titan.privacy` | بروتوكول خصوصية البيانات — متاح دائماً لأنه التزام قانوني |
-| `titan.migration` | مساعد الترحيل — متاح دائماً لتخفيض حاجز الانتقال لـ Titan |
+| `titan.links` | **هوية Titan نفسها** — بروتوكول ربط الرسائل، مجاني دائماً |
+| `titan.privacy` | بروتوكول خصوصية البيانات — التزام قانوني |
+| `titan.migration` | مساعد الترحيل — يُخفِّض حاجز الانتقال لـ Titan |
+
+> **ملاحظة `titan.links`:** هذه ليست ميزة مُضافة — هي جزء من هوية Titan كإطار.
+> إغلاقها خلف Entitlement يعني إغلاق قدرة جوهرية عن مستخدم يستحقها بالفعل.
+
+---
+
+## أنواع Entitlements
+
+### Boolean
+قيمة تشغيل/إيقاف.
+```
+atlas_access: true | false
+```
+
+### Numeric
+حد كمي.
+```
+max_projects_total: 3
+```
+
+### Capability Tier *(نوع جديد)*
+مستوى وصول متعدد الدرجات — ليس مفتاحاً ثنائياً.
+```
+inspector_level: none | basic | advanced
+```
+
+**لماذا هذا النوع ضروري:**
+الأدوات ليست دائماً مفتاح تشغيل/إيقاف.
+Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحترف يُعطي تاريخاً وتتبعاً كاملاً.
+نفس الأداة، مستويات مختلفة، قيمة مختلفة.
 
 ---
 
@@ -40,200 +72,178 @@
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
-| `max_bots` | integer | عدد المشاريع المسجَّلة في CUPS |
-| `team_members_limit` | integer | عدد أعضاء الفريق (`0` = لا فريق) |
+| `max_projects_total` | Numeric | إجمالي المشاريع المسجَّلة في CUPS عبر كل المنتجات |
+| `team_members_limit` | Numeric | عدد أعضاء الفريق (`0` = لا فريق) |
 
-### أدوات المطور
+> **`max_projects_total` is across all products** — ليس per-product.
+> 3 projects = 3 مشاريع إجمالاً، بغض النظر إن كانت Titan بوتات أو Mini Apps أو ألعاب.
+> هذا يمنع الالتفاف (Titan: 3 + Games: 3 + Apps: 3 = 9 فعلياً).
+> مستقبلاً: شركات تحتاج product-specific limits → تُضاف كـ Entitlements منفصلة.
 
-| Entitlement | النوع | الوصف |
-|---|---|---|
-| `atlas_access` | boolean | `titan.atlas` — الذاكرة المعمارية والـ AI assistant |
-| `lint_advanced` | boolean | `bot.lint()` — قواعد lint متقدمة |
-| `inspector_access` | boolean | `bot.inspect()` — لقطة حالة البوت (BotSnapshot) |
-| `playground_access` | boolean | `titan.playground` — بيئة اختبار البوت |
-| `profiler_access` | boolean | `titan.profiler` — قياس الأداء |
-| `timeline_access` | boolean | `titan.timeline` — سجل التطور المعماري |
-
-### أدوات الإنتاج
+### أدوات المطور (Developer Workflow)
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
-| `health_access` | boolean | `bot.health()` — فحص صحة البوت |
-| `links_access` | boolean | `titan.links` — بروتوكول روابط الرسائل |
+| `atlas_access` | Boolean | `titan.atlas` — الذاكرة المعمارية والـ AI assistant |
+| `lint_advanced` | Boolean | `bot.lint()` — قواعد lint متقدمة |
+| `inspector_level` | Capability Tier | `bot.inspect()` — none / basic / advanced |
+| `playground_access` | Boolean | `titan.playground` — بيئة اختبار البوت |
+| `profiler_access` | Boolean | `titan.profiler` — قياس الأداء |
+| `timeline_access` | Boolean | `titan.timeline` — سجل التطور المعماري |
+
+### أدوات الإنتاج (Production Workflow)
+
+| Entitlement | النوع | الوصف |
+|---|---|---|
+| `health_access` | Boolean | `bot.health()` — مراقبة صحة البوت في الإنتاج |
 
 ### Team
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
-| `team_access` | boolean | إمكانية إنشاء فريق وإضافة أعضاء |
+| `team_access` | Boolean | إمكانية إنشاء فريق وإضافة أعضاء |
 
-### الدعم
+### الدعم والإحصاءات
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
-| `analytics_access` | boolean | إحصاءات وتقارير الاستخدام |
-| `priority_support` | boolean | دعم ذو أولوية |
+| `analytics_access` | Boolean | إحصاءات وتقارير الاستخدام |
+| `priority_support` | Boolean | دعم ذو أولوية |
+
+---
+
+## هوية كل خطة
+
+| الخطة | الهوية |
+|---|---|
+| Starter | أتعلم وأبني |
+| Plus | أطور باحتراف |
+| Core | أشغّل وأتعاون |
+| Ultra | أدير منظومة |
+
+كل انتقال له قصة — ليس مجرد سعر أعلى.
 
 ---
 
 ## ترجمة الخطط إلى Entitlements
 
-### Starter — مجاني
+### Starter — مجاني | أتعلم وأبني
 
 ```json
 {
-  "max_bots": 3,
+  "max_projects_total": 3,
   "team_members_limit": 0,
   "atlas_access": false,
   "lint_advanced": false,
-  "inspector_access": false,
+  "inspector_level": "basic",
   "playground_access": false,
   "profiler_access": false,
   "timeline_access": false,
   "health_access": false,
-  "links_access": false,
   "team_access": false,
   "analytics_access": false,
   "priority_support": false
 }
 ```
 
-**ما يعمل:** الإطار كاملاً — بناء بوتات، نشر، تشغيل. بلا قيود على الإطار نفسه.
-**ما لا يعمل:** أدوات المطور المتقدمة، أدوات الإنتاج، الفريق.
+**ما يعمل:** الإطار كاملاً + Inspector بشكل محدود (basic state فقط، لا history).
+**لماذا Inspector Basic وليس none:** Starter يجب أن يكون تجربة عادلة، لا نسخة مشلولة.
+**ما لا يعمل:** Atlas، Lint المتقدم، Playground، Profiler، Timeline، Health، Team.
+
+**Inspector Basic يعني:**
+- ✓ عرض حالة البوت الحالية (handlers، middleware، state)
+- ✗ تاريخ التغييرات
+- ✗ المقارنة بين لحظتين
 
 ---
 
-### Plus — $4.99/شهر | $49/سنة
+### Plus — $4.99/شهر | $49/سنة | أطور باحتراف
 
 ```json
 {
-  "max_bots": 10,
+  "max_projects_total": 10,
   "team_members_limit": 0,
   "atlas_access": true,
   "lint_advanced": true,
-  "inspector_access": true,
+  "inspector_level": "advanced",
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
   "health_access": false,
-  "links_access": false,
   "team_access": false,
   "analytics_access": false,
   "priority_support": false
 }
 ```
 
-**ما يفتح:** حزمة أدوات المطور كاملة — Atlas، Lint، Inspector، Playground، Profiler، Timeline.
-**الجمهور:** المطور الجاد الذي يبني مشاريع متعددة ويهتم بجودة الكود.
+**ما يفتح:** حزمة Developer Workflow كاملة.
+**الجمهور:** المطور الجاد الذي يبني باحتراف ويهتم بجودة الكود.
 
 ---
 
-### Core — $7.99/شهر | $79/سنة
+### Core — $7.99/شهر | $79/سنة | أشغّل وأتعاون
 
 ```json
 {
-  "max_bots": 20,
+  "max_projects_total": 20,
   "team_members_limit": 5,
   "atlas_access": true,
   "lint_advanced": true,
-  "inspector_access": true,
+  "inspector_level": "advanced",
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
   "health_access": true,
-  "links_access": true,
   "team_access": true,
   "analytics_access": false,
   "priority_support": false
 }
 ```
 
-**ما يفتح فوق Plus:** أدوات الإنتاج (Health، Links)، وإمكانية الفريق (حتى 5 أعضاء).
-**الجمهور:** الفرق الصغيرة والمشاريع الإنتاجية الجادة.
+**ما يفتح فوق Plus:** Health (مراقبة الإنتاج) + Team (تعاون حتى 5 أعضاء).
+**الفصل الواضح:** Plus = Developer Workflow / Core = Production Workflow + Team.
 
 ---
 
-### Ultra — $14.99/شهر | $149/سنة
+### Ultra — $14.99/شهر | $149/سنة | أدير منظومة
 
 ```json
 {
-  "max_bots": 100,
+  "max_projects_total": 100,
   "team_members_limit": 20,
   "atlas_access": true,
   "lint_advanced": true,
-  "inspector_access": true,
+  "inspector_level": "advanced",
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
   "health_access": true,
-  "links_access": true,
   "team_access": true,
   "analytics_access": true,
   "priority_support": true
 }
 ```
 
-**ما يفتح فوق Core:** Analytics، Priority Support، فريق حتى 20 عضواً.
-**الجمهور:** الشركات والمحترفون.
-
----
-
-## ⚠️ قرار معلَّق — يحتاج موافقة
-
-**الأسئلة الخمسة التي تحدد "الذهب" النهائي:**
-
-### ١. هل Titan منتج واحد أم منتجات منفصلة؟
-
-**المقترح الحالي:** منتج واحد (`titan-framework`) بـ Entitlements داخلية.
-
-**البديل:** منتجات منفصلة (`titan-core` مجاني، `titan-developer-tools` مدفوع).
-
-*البديل يُعقِّد تجربة المستخدم — منتج واحد أبسط وأوضح.*
-
----
-
-### ٢. هل `health_access` في Core أم Plus؟
-
-`bot.health()` أداة تشخيص — قد يحتاجها أي مطور جاد، لا فقط الفرق.
-
-- **Core (الحالي):** يُشير لكونها production monitoring للفرق.
-- **Plus (البديل):** يُشير لكونها developer tool.
-
----
-
-### ٣. هل `links_access` في Core أم Plus؟
-
-`titan.links` (LinksManager، SqliteMessageStore) — بروتوكول متخصص لربط الرسائل.
-
-- **Core (الحالي):** استخدامه production يبرر وضعه مع أدوات الإنتاج.
-- **Plus (البديل):** أداة مطور متقدمة، ليست production بالضرورة.
-
----
-
-### ٤. هل `inspector_access` و`timeline_access` مفيدان للـ Starter؟
-
-الـ Inspector (`bot.inspect()`) يُعطي لقطة حالة البوت — مفيد للتطوير.
-الـ Timeline سجل معماري — ذو قيمة لكن ليس ضرورياً للمبتدئ.
-
----
-
-### ٥. ما حد `max_bots` الذي يشعر "بالضيق" في Starter بشكل عادل؟
-
-3 مشاريع كافية للتجربة الشخصية. لكن:
-- هل 3 صحيح أم 5 يكون أعدل؟
-- هل max_bots يُحسب per-product أم across all products في CUPS؟
+**ما يفتح فوق Core:** Analytics + Priority Support + فريق حتى 20 عضواً.
 
 ---
 
 ## كيف يستخدم الكود Entitlements
 
 ```python
-# ✅ صح — يفحص Entitlement محدداً
+# Boolean — تشغيل/إيقاف
 if not await cups.require(ctx, entitlement="atlas_access"):
     return
 
-# ✅ صح — قيمة كمية
-limit = await cups.value(ctx, entitlement="max_bots")
+# Numeric — حد كمي
+limit = await cups.value(ctx, entitlement="max_projects_total")
+
+# Capability Tier — مستوى وصول
+level = await cups.tier(ctx, entitlement="inspector_level")
+if level == "none":
+    return
+show_basic = level in ("basic", "advanced")
+show_advanced = level == "advanced"
 
 # ❌ خطأ — لا تفحص Plan مباشرةً
 if user_plan == "plus":
@@ -244,10 +254,10 @@ if user_plan == "plus":
 
 ## إضافة Entitlement جديد
 
-1. أضف السطر في جدول القائمة أعلاه (الاسم، النوع، الوصف).
-2. حدد قيمته في كل خطة من الأربع.
-3. Starter يحصل على القيمة الأكثر تقييداً (`false` أو `0`).
-4. استخدم الاسم مباشرةً في الكود.
+1. حدد النوع: Boolean / Numeric / Capability Tier.
+2. أضف السطر في الجدول المناسب أعلاه.
+3. حدد قيمته في كل خطة من الأربع.
+4. Starter يحصل على القيمة الأكثر تقييداً.
+5. استخدم الاسم مباشرةً في الكود.
 
 **لا تغيير في اسم الخطة. لا تغيير في CUPS بنية.**
-هذا هو سبب فصل Entitlement عن Plan.
