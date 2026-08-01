@@ -152,6 +152,41 @@ Numeric Entitlement   ← حد كمي
 
 ---
 
+## Capability
+
+**التعريف:**
+Capability هو قدرة تقنية موجودة داخل المنتج — يمكن التحكم في وصول المستخدم إليها عبر Entitlements.
+
+**الفرق الجوهري:**
+```
+Capability  = ما يستطيع المنتج فعله
+Entitlement = ما يُسمح للمستخدم بفعله
+```
+
+**مثال:**
+```
+Capability:   titan.atlas.memory
+Entitlement:  atlas_access = true
+```
+
+**لماذا هذا التمييز مهم:**
+اليوم `atlas_access: Boolean` يكفي.
+لكن عندما ينمو Atlas:
+```
+atlas.memory
+atlas.context_window
+atlas.history_depth
+atlas.team_memory
+```
+كل منها Capability مستقلة — وبدون هذا الفصل ستتضخم Entitlements وتفقد وضوحها.
+
+**القاعدة:**
+- Capability تعيش داخل المنتج — تُعرَّف في كود المنتج.
+- Entitlement تعيش في CUPS — تتحكم في الوصول إلى Capability.
+- لا يُغلق أي شيء خلف Entitlement إلا إذا كانت هناك Capability حقيقية قائمة بذاتها.
+
+---
+
 ## Subscription
 
 **التعريف:**
@@ -227,6 +262,15 @@ Team
   مؤسسية حقيقية (شركة + موظفون + أدوار منفصلة). يُضاف حينها كـ Entitlement
   مستقل دون تغيير البنية الأساسية.
 
+**حدود Team — خط لا يُتجاوز:**
+```
+Team         ← مطوّر يدعو مطورين للتعاون داخل اشتراكه         ← مدعوم الآن
+Organization ← كيان تجاري/قانوني بفواتير وأدوار وأذونات منفصلة ← مؤجَّل
+```
+أكبر فخ في أنظمة الاشتراك: الفريق الصغير يتحول تدريجياً إلى شركة،
+فتبدأ الضغوط على إضافة أدوار وصلاحيات وفواتير منفصلة.
+**Team ليس Organization — هذا الخط لا يُتجاوز بدون قرار معماري صريح ومدروس.**
+
 ---
 
 ## الحالة الموضَّحة
@@ -243,8 +287,8 @@ Account (Telegram user_id: 123456)
 │       ├── team_access: true
 │       ├── team_members_limit: 5
 │       ├── advanced_lint: true
-│       ├── analytics: false
-│       └── priority_support: false
+│       ├── runtime_visibility: true
+│       └── usage_insights: false
 │
 ├── Projects
 │   ├── { project_id: "abc", product: "titan-framework", name: "MyBot" }

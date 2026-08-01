@@ -8,13 +8,21 @@
 
 ```
 CUPS Platform
-├── CUPS Bot          ← الباب الأمامي — كل تفاعل مستخدم يمر هنا
+├── CUPS Bot           ← الباب الأمامي — كل تفاعل مستخدم يمر هنا
 ├── Entitlement Engine ← قلب النظام — يُقيّم ما يملكه المستخدم
-├── Product Catalog   ← تعريفات المنتجات وEntitlements كل منها (لا auto-discovery)
-├── Billing           ← إدارة الدفع والتجديد والتجريب
-└── Extensions        ← الجسور بين CUPS والمنتجات
+├── Product Catalog    ← تعريفات المنتجات وEntitlements كل منها (لا auto-discovery)
+│   └── Capabilities   ← ما يستطيع المنتج فعله (مستقل عن ما يُسمح للمستخدم)
+├── Billing            ← إدارة الدفع والتجديد والتجريب
+└── Extensions         ← الجسور بين CUPS والمنتجات
     └── titan-extension-cups  ← التكامل مع Titan
 ```
+
+**الفصل بين Capability وEntitlement:**
+```
+Capability  = تعريف داخل المنتج — "ماذا يستطيع البرنامج؟"
+Entitlement = تعريف داخل CUPS  — "ماذا يُسمح للمستخدم؟"
+```
+هذا الفصل يجعل المنتج ينمو (تُضاف Capabilities) بدون أن تتضخم Entitlements.
 
 ---
 

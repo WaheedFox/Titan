@@ -95,20 +95,14 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
-| `health_access` | Boolean | `bot.health()` — مراقبة صحة البوت في الإنتاج |
+| `runtime_visibility` | Boolean | `bot.health()` — رؤية ما يحدث في الإنتاج. القيمة: "بوتك يعمل ليلاً، وأنت تعرف كيف حاله في الصباح." |
+| `usage_insights` | Boolean | `titan.analytics` — فهم سلوك مستخدمي البوت: أين يتوقفون، أي أمر يُتخلى عنه في منتصف الطريق، المسار الأكثر استخداماً. القيمة: معرفة، لا مجرد أرقام. |
 
 ### Team
 
 | Entitlement | النوع | الوصف |
 |---|---|---|
 | `team_access` | Boolean | إمكانية إنشاء فريق وإضافة أعضاء |
-
-### الدعم والإحصاءات
-
-| Entitlement | النوع | الوصف |
-|---|---|---|
-| `analytics_access` | Boolean | إحصاءات وتقارير الاستخدام |
-| `priority_support` | Boolean | دعم ذو أولوية |
 
 ---
 
@@ -139,10 +133,9 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
   "playground_access": false,
   "profiler_access": false,
   "timeline_access": false,
-  "health_access": false,
-  "team_access": false,
-  "analytics_access": false,
-  "priority_support": false
+  "runtime_visibility": false,
+  "usage_insights": false,
+  "team_access": false
 }
 ```
 
@@ -169,10 +162,9 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
-  "health_access": false,
-  "team_access": false,
-  "analytics_access": false,
-  "priority_support": false
+  "runtime_visibility": false,
+  "usage_insights": false,
+  "team_access": false
 }
 ```
 
@@ -193,14 +185,13 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
-  "health_access": true,
-  "team_access": true,
-  "analytics_access": false,
-  "priority_support": false
+  "runtime_visibility": true,
+  "usage_insights": false,
+  "team_access": true
 }
 ```
 
-**ما يفتح فوق Plus:** Health (مراقبة الإنتاج) + Team (تعاون حتى 5 أعضاء).
+**ما يفتح فوق Plus:** runtime_visibility (رؤية الإنتاج) + Team (تعاون حتى 5 أعضاء).
 **الفصل الواضح:** Plus = Developer Workflow / Core = Production Workflow + Team.
 
 ---
@@ -217,14 +208,32 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
   "playground_access": true,
   "profiler_access": true,
   "timeline_access": true,
-  "health_access": true,
-  "team_access": true,
-  "analytics_access": true,
-  "priority_support": true
+  "runtime_visibility": true,
+  "usage_insights": true,
+  "team_access": true
 }
 ```
 
-**ما يفتح فوق Core:** Analytics + Priority Support + فريق حتى 20 عضواً.
+**ما يفتح فوق Core:** usage_insights (فهم سلوك المستخدمين) + فريق حتى 20 عضواً.
+
+---
+
+## Service Commitments — خارج Entitlements
+
+هذه ليست قدرات داخل المنتج — هي التزامات في العلاقة مع الفريق.
+
+**الفرق الجوهري:**
+```
+Product Entitlement  = يغيّر ما يفعله البرنامج
+Service Commitment   = يغيّر كيف يتعامل الفريق مع المستخدم
+```
+
+| Commitment | المعنى |
+|---|---|
+| `priority_support` | وقت استجابة أولوي من الفريق (Ultra) |
+| `dedicated_contact` | نقطة تواصل مباشرة (مستقبلاً، للشركات) |
+
+**ملاحظة:** هذه الالتزامات تُذكر في صفحة الأسعار — لكنها لا تنتمي لجدول Entitlements التقنية ولا تُفحص في runtime. الكود لا يعرف بها.
 
 ---
 
