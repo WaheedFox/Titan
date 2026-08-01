@@ -145,6 +145,59 @@ async def export_data(ctx):
 
 ---
 
+## Decision Flow — اتجاه التبعية
+
+الطبقات العليا تُعرِّف المعنى. الطبقات السفلى تُنفِّذ التجربة.
+
+```
+Philosophy      ← لماذا يوجد CUPS
+     ↓
+Domain          ← ما هي الكيانات وتعريفاتها
+     ↓
+Product Catalog ← ماذا يستطيع كل منتج أن يفعل
+     ↓
+Capabilities    ← القدرات التقنية الموجودة داخل المنتج
+     ↓
+Entitlements    ← ما يُسمح للمستخدم بالوصول إليه
+     ↓
+Plans           ← bundle تجاري من Entitlements بسعر محدد
+     ↓
+Subscriptions   ← العلاقة الفعلية بين مستخدم وخطة في وقت محدد
+     ↓
+Runtime         ← التحقق الفعلي من Entitlement عند كل طلب
+     ↓
+Experience      ← ما يشعر به المستخدم في كل لحظة
+```
+
+**القواعد الصارمة:**
+- Runtime لا يعرف Plan — يعرف Entitlement فقط
+- Experience لا تُعرِّف Capability — تعكسها فقط
+- Plan لا يخترع Entitlement — يجمع ما هو موجود بالفعل
+- أي تغيير في طبقة يُسأل: "هل يؤثر على الطبقات تحته؟"
+
+---
+
+## Source of Truth — من يعرف ماذا
+
+أكبر خطر مستقبلي: كل منتج يبدأ بتفسير Entitlements بطريقته.
+
+```
+Product Catalog       ← يعرف أسماء Entitlements (لا معناها التشغيلي)
+       ↓
+Entitlement Engine    ← يعرف قيمة كل Entitlement لكل مستخدم
+       ↓
+Product Extension     ← يعرف كيف يُطبِّق الـ Entitlement داخل المنتج
+```
+
+**القاعدة:**
+- CUPS Engine لا يعرف معنى Entitlement — يعرف قيمته.
+- Product Catalog يعرف الاسم — لا التطبيق.
+- Product Extension يعرف التطبيق — لا القيمة.
+
+هذا الفصل يمنع أي منتج من "إعادة تفسير" ما يملكه المستخدم.
+
+---
+
 ## هيكل المجلدات
 
 ```
