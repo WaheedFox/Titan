@@ -189,12 +189,51 @@ Entitlement Engine    ← يعرف قيمة كل Entitlement لكل مستخدم
 Product Extension     ← يعرف كيف يُطبِّق الـ Entitlement داخل المنتج
 ```
 
-**القاعدة:**
-- CUPS Engine لا يعرف معنى Entitlement — يعرف قيمته.
-- Product Catalog يعرف الاسم — لا التطبيق.
-- Product Extension يعرف التطبيق — لا القيمة.
+**Authority Direction — من يحدد ومن ينفّذ:**
+```
+CUPS Engine          ← يُحدِّد الإذن  "هل يملك المستخدم هذه القدرة؟"
+       ↓
+Entitlement Engine   ← يُحلّ القيمة  "ما القيمة الفعلية لهذا الاشتراك؟"
+       ↓
+Extension            ← يُنفِّذ السلوك "ما الذي يحدث بناءً على هذا الإذن؟"
+```
 
-هذا الفصل يمنع أي منتج من "إعادة تفسير" ما يملكه المستخدم.
+**القاعدة الجوهرية:**
+> CUPS determines permission. Extensions enforce behavior.
+
+Extension ليست أقل أهمية — هي فقط ليست مصدر الحقيقة.
+
+مثال:
+- CUPS: "`atlas_access` = false لهذا الحساب."
+- Extension: "أخفي واجهة Atlas، وأمنع تنفيذ أي استدعاء لها."
+
+الفصل يمنع أي Extension من "إعادة تفسير" ما يملكه المستخدم.
+
+---
+
+## Consistency Model — الحالة ليست فورية
+
+Billing state ليست Runtime state مباشرة.
+
+```
+Billing Event (دفع / انتهاء / ترقية)
+        ↓
+Subscription Update في CUPS
+        ↓
+Entitlement Resolution   ← هنا تُحسب القيم الفعلية
+        ↓
+Runtime Cache            ← ما يراه Extension في كل طلب
+        ↓
+Expiration / Invalidation ← عند تغيير الاشتراك
+```
+
+**المبادئ (بدون تفاصيل تقنية الآن):**
+- Runtime يعتمد على resolved entitlements — لا على Billing state مباشرة.
+- Cache له expiry معقول — لا يبقى إلى ما لا نهاية.
+- عند تغيير الاشتراك: Cache يُبطَل أو يُجدَّد في أقرب وقت.
+- في حالة التعارض: CUPS Engine هو المرجع النهائي دائماً.
+
+**الأرقام والتفاصيل التقنية:** تُحدَّد عند التنفيذ — المبدأ ثابت.
 
 ---
 
