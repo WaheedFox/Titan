@@ -162,11 +162,13 @@ Entitlements    ← ما يُسمح للمستخدم بالوصول إليه
      ↓
 Plans           ← bundle تجاري من Entitlements بسعر محدد
      ↓
-Subscriptions   ← العلاقة الفعلية بين مستخدم وخطة في وقت محدد
+Subscriptions          ← العلاقة الفعلية بين مستخدم وخطة في وقت محدد
      ↓
-Runtime         ← التحقق الفعلي من Entitlement عند كل طلب
+Entitlement Resolution ← تحويل Subscription إلى Resolved Entitlements
      ↓
-Experience      ← ما يشعر به المستخدم في كل لحظة
+Runtime                ← يستهلك Resolved Entitlements فقط — لا يقيّم Subscription
+     ↓
+Experience             ← ما يشعر به المستخدم في كل لحظة
 ```
 
 **القواعد الصارمة:**
@@ -227,8 +229,15 @@ Runtime Cache            ← ما يراه Extension في كل طلب
 Expiration / Invalidation ← عند تغيير الاشتراك
 ```
 
+**القاعدة الأساسية:**
+> Runtime never evaluates subscriptions directly. Runtime consumes resolved entitlements only.
+
+هذه القاعدة تمنع تكرار الخطأ القديم بطريقة جديدة:
+اليوم قد يتغير Plan، يتأخر Billing، أو يكون Cache قديماً.
+إذا بدأ أي Extension بتفسير Subscription مباشرة — تتباين النتائج عبر المنظومة.
+
 **المبادئ (بدون تفاصيل تقنية الآن):**
-- Runtime يعتمد على resolved entitlements — لا على Billing state مباشرة.
+- Runtime يعتمد على Resolved Entitlements — لا على Billing state أو Subscription مباشرة.
 - Cache له expiry معقول — لا يبقى إلى ما لا نهاية.
 - عند تغيير الاشتراك: Cache يُبطَل أو يُجدَّد في أقرب وقت.
 - في حالة التعارض: CUPS Engine هو المرجع النهائي دائماً.

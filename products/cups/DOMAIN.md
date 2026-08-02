@@ -187,6 +187,46 @@ atlas.team_memory
 
 ---
 
+## Entitlement Resolution
+
+**التعريف:**
+Entitlement Resolution هو **عملية Domain** — ليس كياناً ثابتاً.
+يحوّل Subscription إلى مجموعة Resolved Entitlements قابلة للاستهلاك مباشرة في runtime.
+
+**الفرق الجوهري:**
+```
+Entitlement         = "ما الحق؟"       ← تعريف ثابت في CUPS Catalog
+Entitlement Resolution = "ما الحالة الفعلية لهذا الحق الآن؟"  ← تقييم لحظي
+```
+
+**مثال:**
+```
+Subscription: Core
+       ↓
+Entitlement Resolution
+       ↓
+Resolved Entitlements:
+  atlas_access        = true
+  runtime_visibility  = true
+  usage_insights      = false
+  team_access         = true
+  max_bots            = 20
+       ↓
+Runtime Checks
+```
+
+**القواعد:**
+- Resolution تحدث بعد كل تغيير في Subscription (ترقية / تخفيض / انتهاء / تجديد).
+- Resolved Entitlements هي ما يراه Runtime — لا شيء آخر.
+- Runtime لا يُقيِّم Subscription مباشرة. يستهلك Resolved Entitlements فقط.
+- في حالة التعارض أو الشك: CUPS Engine يُعيد Resolution من الصفر.
+
+**لماذا هو كيان Domain وليس تفصيل تقني:**
+بدونه، كل Extension تبدأ بالاستنتاج من بيانات Subscription — وهذا هو بالضبط الخلط الذي تمنعه قاعدة
+"Runtime never evaluates subscriptions directly."
+
+---
+
 ## Subscription
 
 **التعريف:**
