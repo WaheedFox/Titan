@@ -41,6 +41,10 @@
 ### Business Signals — إشارات التجارة
 تُدير دورة حياة الاشتراك — ليست Operational ولا Experience، لكن CUPS يعتمد عليها.
 
+> **ملاحظة للتنفيذ:** هذه أحداث (Events) بطبيعتها أكثر من كونها بيانات ثابتة —
+> `PaymentSucceeded`، `SubscriptionExpired`، `RefundIssued`.
+> قد يصبح الاسم `Business Events` أدق عند بناء الـ event system.
+
 | البيانات | السبب |
 |---|---|
 | نجاح الدفع | لتفعيل Subscription وتشغيل Entitlement Resolution |
