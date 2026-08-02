@@ -38,9 +38,22 @@
 | تكرار استخدام ميزة معينة (مثل Atlas) | لتوقيت رسائل Data Awareness بشكل طبيعي |
 | اكتمال رحلة معينة (مثل أول Deployment) | لتقديم التوقيت الصحيح لـ Ownership Moment |
 
+### Business Signals — إشارات التجارة
+تُدير دورة حياة الاشتراك — ليست Operational ولا Experience، لكن CUPS يعتمد عليها.
+
+| البيانات | السبب |
+|---|---|
+| نجاح الدفع | لتفعيل Subscription وتشغيل Entitlement Resolution |
+| فشل الدفع | للانتقال لـ grace period |
+| انتهاء الاشتراك | للانتقال إلى frozen ثم Starter |
+| Refund أو Chargeback | لإعادة حساب حالة الاشتراك فوراً |
+
+Business Signals لا تُشارَك مع أي طبقة أخرى — هي بين Billing وCUPS Engine فقط.
+
 **القاعدة:**
 Operational Signals تُعالَج تلقائياً — لا يحتاج إذن صريح.
 Experience Signals تُستخدم فقط لصالح المستخدم نفسه — لا لأغراض التحسين الداخلي أو التسويق.
+Business Signals تُعالَج داخل Billing ↔ CUPS فقط — لا تصل لـ Extensions أو رسائل المستخدم مباشرة.
 
 ---
 

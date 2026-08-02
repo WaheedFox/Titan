@@ -229,8 +229,12 @@ Runtime Cache            ← ما يراه Extension في كل طلب
 Expiration / Invalidation ← عند تغيير الاشتراك
 ```
 
-**القاعدة الأساسية:**
-> Runtime never evaluates subscriptions directly. Runtime consumes resolved entitlements only.
+**القاعدة الأساسية — غير قابلة للكسر:**
+> Runtime MUST NEVER evaluate subscriptions directly.
+> Runtime MUST consume resolved entitlements only.
+
+`MUST NEVER` هنا تعني: لا استثناء، لا "في حالة الطوارئ"، لا "مؤقتاً".
+أي Extension تقرأ Subscription مباشرة تكسر هذه القاعدة — بغض النظر عن السبب.
 
 هذه القاعدة تمنع تكرار الخطأ القديم بطريقة جديدة:
 اليوم قد يتغير Plan، يتأخر Billing، أو يكون Cache قديماً.

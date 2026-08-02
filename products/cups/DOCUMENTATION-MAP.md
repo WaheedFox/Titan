@@ -97,6 +97,27 @@ DATA-PRINCIPLES.md
 
 ---
 
+## Documentation Authority — من يفوز عند التعارض
+
+إذا تعارضت وثيقتان، هذا هو ترتيب السلطة:
+
+```
+١. PRODUCT_PHILOSOPHY.md   ← لماذا — لا يُكسر
+٢. DOMAIN.md               ← ما هي الكيانات وتعريفاتها الرسمية
+٣. ARCHITECTURE.md         ← كيف تعمل المنظومة وحدودها
+٤. بقية الوثائق           ← تطبيقات وتفاصيل — تخضع للثلاثة أعلاه
+```
+
+**أمثلة:**
+- EXPERIENCE-JOURNEY يقترح رسالة تتعارض مع DATA-PRINCIPLES → DATA-PRINCIPLES يفوز، لأنه أقرب إلى ARCHITECTURE.
+- PLANS يضيف Entitlement غير موجود في DOMAIN → DOMAIN يفوز، الإضافة تمر به أولاً.
+- ENTITLEMENTS يصف سلوكاً يتعارض مع PRODUCT_PHILOSOPHY → PHILOSOPHY يفوز دائماً.
+
+**القاعدة العملية:**
+أي تعارض يحتاج قراراً معمارياً — لا يُحسَم بالكتابة فوق الوثيقة الأضعف.
+
+---
+
 ## ترتيب القراءة الموصى به لشخص جديد
 
 ```

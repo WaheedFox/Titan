@@ -106,6 +106,25 @@ Inspector للمبتدئ يُعطي نظرة عامة — Inspector للمحتر
 
 ---
 
+## ملاحظة معمارية — هذه القيم ليست نهائية بذاتها
+
+القيم المُعرَّفة في هذا الملف هي **input** لـ Entitlement Resolution.
+Runtime لا يقرأ هذا الملف مباشرة — يقرأ **Resolved Entitlements** الصادرة عن CUPS Entitlement Engine.
+
+```
+ENTITLEMENTS.md (هذا الملف)
+       ↓  تعريف القيم النظرية
+Entitlement Resolution  (CUPS Engine)
+       ↓  حساب الحالة الفعلية للاشتراك
+Resolved Entitlements
+       ↓  ما يستهلكه Runtime
+Extension (titan-extension-cups)
+```
+
+انظر: `DOMAIN.md` — كيان `Entitlement Resolution` للتفاصيل.
+
+---
+
 ## هوية كل خطة
 
 | الخطة | الهوية |
