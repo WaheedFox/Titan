@@ -14,6 +14,39 @@
 Phase 1 يجب أن تُنتج نظاماً حقيقياً — حتى لو كان Starter فقط، بلا دفع، بلا Atlas.
 كل Phase بعدها توسّع على شيء يعمل، لا تُكمل شيئاً مكسوراً.
 
+**ترتيب الـ Phases مبني على قاعدة واحدة:**
+الـ SDK يُبنى بعد أن يصبح الـ Runtime نهائياً — لا قبله.
+`cups.require()` يُكتب مرة واحدة، لا مرة ثم تُعاد كتابتها بعد إضافة Trial وGrace وFrozen.
+
+---
+
+## Phase 0 — فصل المستودع
+
+**الهدف:** CUPS يبدأ تاريخه المستقل قبل أول سطر إنتاجي.
+
+### ما يحدث
+
+- إنشاء مستودع مستقل: `cups` (أو `cups-platform` — يُحدَّد)
+- نقل كل وثائق CUPS من `products/cups/` إلى الجذر الجديد
+- إعداد الهيكل الأساسي للمشروع (Python package، CI skeleton، README يشير لـ DOCUMENTATION-MAP)
+
+### لماذا قبل Phase 1 وليس بعده
+
+إذا بدأ التنفيذ داخل Titan repo:
+- كل Commit يصبح جزءاً من تاريخ Titan لا CUPS
+- الـ merge conflicts تبدأ من اليوم الأول
+- CUPS يصبح عملياً "مجلداً داخل Titan" — وهذا ضد فلسفته كـ Platform مستقل
+
+CUPS منظومة تخدم Titan وغيره. مستودعها يعكس هذا من الـ commit الأول.
+
+### كيف تعرف أنها انتهت
+```
+git clone cups-repo
+cd cups
+ls
+→ docs/  src/  README.md  (لا titan في أي مكان)
+```
+
 ---
 
 ## Phase 1 — الهيكل الأساسي
@@ -58,9 +91,72 @@ Phase 1 يجب أن تُنتج نظاماً حقيقياً — حتى لو كا�
 
 ---
 
-## Phase 2 — titan-extension-cups
+## Phase 2 — Subscription Engine
 
-**الهدف:** أي مطور Titan يستطيع ربط بوته بـ CUPS في 5 دقائق.
+**الهدف:** الـ Runtime يصبح نهائياً — قبل أن يُبنى أي SDK عليه.
+
+### ما يُبنى
+
+**Subscription Lifecycle (كامل):**
+```
+trial → active → grace → frozen → expired → Starter
+```
+كل حالة موجودة، كل انتقال يعمل. لا Billing UI حقيقي بعد — الدفع يُحاكى داخلياً.
+
+**Business Events (محاكاة):**
+```python
+# داخلياً فقط — لا مزوّد دفع خارجي بعد
+cups.simulate_payment(account_id, plan="plus")  # → PaymentSucceeded
+cups.simulate_expiry(account_id)                # → SubscriptionExpired
+```
+
+- `PaymentSucceeded` → Subscription تُفعَّل → Entitlement Resolution يُشغَّل
+- `PaymentFailed` → grace period
+- `SubscriptionExpired` → frozen → Starter
+- `RefundIssued` → إعادة حساب فورية
+
+**Entitlement Resolution (كامل):**
+- يعمل على كل تغيير حالة
+- Cache invalidation عند كل انتقال
+- في حالة التعارض: CUPS Engine هو المرجع
+
+**Trial Flow:**
+- 3 أيام تُفتح تلقائياً
+- آلية تمديد بناءً على الاستخدام
+- الانتهاء بدون دفع → Starter تلقائياً
+
+### ما لا يُبنى
+- لا مزوّد دفع خارجي (Stripe / Telegram Stars — Phase 3)
+- لا SDK بعد
+- لا زر `/upgrade` حقيقي
+
+### لماذا هذا قبل SDK
+
+بعد هذه المرحلة، Runtime له حالات:
+`trial`, `active`, `grace`, `frozen`, `expired`
+
+الـ SDK الذي سيُبنى في Phase 3 سيتعامل مع **كل** هذه الحالات من اليوم الأول.
+لو بُني SDK قبل هذا، كان سيُكتب على Runtime أبسط ثم يُعاد جزء منه بعد إضافة Grace وFrozen.
+
+### كيف تعرف أنها انتهت
+```
+# محاكاة كاملة بدون Telegram Bot للدفع
+cups.simulate_payment(account_id=123, plan="plus")
+→ Entitlement Resolution يُشغَّل
+→ atlas_access = true
+
+cups.simulate_expiry(account_id=123)
+→ grace period
+→ بعد المدة: frozen
+→ بعد المدة: Starter تلقائياً
+→ atlas_access = false
+```
+
+---
+
+## Phase 3 — titan-extension-cups
+
+**الهدف:** أي مطور Titan يستطيع ربط بوته بـ CUPS في 5 دقائق — على Runtime نهائي.
 
 ### ما يُبنى
 
@@ -69,7 +165,6 @@ Phase 1 يجب أن تُنتج نظاماً حقيقياً — حتى لو كا�
 cups = CUPSGuard(api_key="...", project_id="abc123")
 bot.middleware(cups.as_middleware())
 
-# الاستخدام
 @bot.command("export")
 async def export_data(ctx):
     if not await cups.require(ctx, entitlement="data_export"):
@@ -77,73 +172,36 @@ async def export_data(ctx):
     # ... المنطق الفعلي
 ```
 
-- `CUPSGuard.as_middleware()` — يُشغَّل على كل update، يُضيف `ctx.entitlements`
-- `cups.require(ctx, entitlement)` — يُوقف التنفيذ ويُبلّغ المستخدم إذا لم يملك الحق
+- `CUPSGuard.as_middleware()` — يُضيف Resolved Entitlements لكل ctx
+- `cups.require(ctx, entitlement)` — يُوقف ويُبلّغ إذا لم يملك الحق
 - `cups.check(ctx, entitlement)` — يُعيد `True/False` بدون إيقاف
-- Caching محلي للـ Resolved Entitlements (TTL بسيط)
-- Fallback behavior عند عدم وصول CUPS (fail-open أو fail-closed — قرار تشغيلي)
+- Cache محلي للـ Resolved Entitlements (TTL) — يُبطَل عند تغيير Subscription
+- Fallback عند عدم وصول CUPS (fail-open أو fail-closed — قرار تشغيلي)
+
+**ربط Billing حقيقي:**
+- مزوّد دفع خارجي (Telegram Stars / Stripe — يُحدَّد)
+- استبدال المحاكاة الداخلية بـ Business Events حقيقية
+- `/upgrade` في CUPS Bot يعمل فعلاً
 
 **قاعدة صارمة:**
-Extension لا تقرأ Subscription. تقرأ Resolved Entitlements فقط.
-`ctx.entitlements["atlas_access"]` — لا `ctx.subscription.plan`.
+```python
+# ✅ صح
+ctx.entitlements["atlas_access"]
 
-### ما لا يُبنى
-- لا Atlas فعلي
-- لا منطق Billing داخل Extension
+# ❌ خطأ — Extension لا تقرأ Subscription أبداً
+ctx.subscription.plan
+```
 
 ### كيف تعرف أنها انتهت
 ```python
-# بوت يعمل على Titan + CUPS Extension
-# Starter: لا يملك atlas_access
+# مستخدم Starter
 @bot.command("atlas")
 async def use_atlas(ctx):
     if not await cups.require(ctx, entitlement="atlas_access"):
-        return  # ← يصل هنا لمستخدم Starter
-    # ← لا يصل هنا إلا بعد Phase 3
-```
+        return  # ← يصل هنا
+    # ← لا يصل هنا
 
----
-
-## Phase 3 — Billing + دورة حياة الاشتراك
-
-**الهدف:** المستخدم يدفع، النظام يعرف، Entitlements تتغيّر.
-
-### ما يُبنى
-
-**Billing Integration:**
-- ربط بمزوّد دفع (يُحدَّد: Telegram Stars / Stripe / غيره)
-- Business Events:
-  - `PaymentSucceeded` → Subscription تُفعَّل → Entitlement Resolution يُشغَّل
-  - `PaymentFailed` → grace period
-  - `SubscriptionExpired` → frozen → Starter
-
-**Subscription Lifecycle:**
-```
-trial → active → grace → frozen → expired → Starter
-```
-- كل انتقال يُطلق Entitlement Resolution من جديد
-- Cache يُبطَل عند كل تغيير حالة
-
-**Trial Flow:**
-- 3 أيام تُفتح تلقائياً عند أول اشتراك مدفوع
-- آلية تمديد بناءً على الاستخدام (العقل، لا الأتمتة الكاملة — يُحدَّد)
-
-**CUPS Bot إضافات:**
-- `/upgrade` — يعرض الخطط ويبدأ عملية الدفع
-- `/billing` — حالة الاشتراك الحالية
-
-### ما لا يُبنى
-- لا Atlas فعلي بعد (الـ Entitlement يُفتح، لكن الـ Feature نفسها Phase 4)
-- لا Team بعد
-
-### كيف تعرف أنها انتهت
-```
-مستخدم يدفع Plus
-       ↓ PaymentSucceeded
-       ↓ Entitlement Resolution
-       ↓ atlas_access = true في Runtime
-       ↓ cups.require(ctx, "atlas_access") → يمرر
-(حتى لو Atlas نفسه لم يُبنَ بعد)
+# مستخدم يدفع Plus عبر /upgrade → atlas_access = true → يصل للـ handler
 ```
 
 ---
@@ -226,9 +284,10 @@ trial → active → grace → frozen → expired → Starter
 
 | Phase | ما يُبنى | المخرج |
 |---|---|---|
+| 0 | فصل المستودع | CUPS له تاريخ مستقل من أول commit |
 | 1 | Account + Project + Starter + Entitlement Resolution + API | النظام يعرف من أنت |
-| 2 | titan-extension-cups SDK | أي Titan bot يتكامل مع CUPS |
-| 3 | Billing + دورة حياة الاشتراك + Trial | المستخدم يدفع والنظام يستجيب |
+| 2 | Subscription Engine كامل (محاكاة) | Runtime نهائي قبل أن يُبنى SDK |
+| 3 | titan-extension-cups + Billing حقيقي | أي Titan bot يتكامل، المستخدم يدفع |
 | 4 | الـ Features الفعلية لكل Entitlement | كل حق مفتوح يُنتج قيمة حقيقية |
 | 5 | الرسائل + نبرة التجربة | المنتج يشعر كما صُمِّم |
 
