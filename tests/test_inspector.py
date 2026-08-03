@@ -1,4 +1,3 @@
-# ﷽
 """
 اختبارات Interactive Inspector — bot.inspect() و BotSnapshot
 

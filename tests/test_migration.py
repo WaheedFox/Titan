@@ -1,4 +1,3 @@
-# ﷽
 """
 اختبارات Migration Knowledge API — titan.migration
 

@@ -1,5 +1,3 @@
-# ﷽
-# Licensed under W.A.S.L v1.0 — github.com/WaheedFox/Titan
 """
 titan.recipes
 

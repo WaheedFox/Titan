@@ -1,4 +1,3 @@
-# ﷽
 """
 اختبارات validate_handler / validate_middleware / validate_error_handler
 
