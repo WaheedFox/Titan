@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.venv/
+.pythonlibs/
+venv/
+ENV/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg
+
+# Local configuration and tool caches
+.env
+.env.*
+!.env.example
+.cache/
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+
+# Local project state
+.titan/
