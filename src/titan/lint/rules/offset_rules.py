@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 
 from titan.lint.findings import LintFinding
+from titan.validation import _is_async
 
 if TYPE_CHECKING:
     from titan.bot import Titan
@@ -15,25 +15,24 @@ def check_on_offset(bot: "Titan") -> list[LintFinding]:
     """
     TITAN_LINT_003 — on_offset يجب ألا تكون async callable.
 
-    دالة async تُمرَّر كـ on_offset تُنشئ coroutine لا تُنفَّذ أبداً
-    (لا تُستدعى بـ await). النتيجة: offset لا يُحفَظ أبداً بصمت تام.
+    public API يرفض دالة async قبل بدء polling. يبقى هذا الفحص
+    للحالات الداخلية التي قد تضع callable غير صالح مباشرةً على bot.
 
-    تُكتشَف فقط بعد run() حيث يُخزَّن _on_offset على bot.
+    يدعم الدوال async وcallable objects ذات __call__ async.
     """
     fn = getattr(bot, "_on_offset", None)
     if fn is None:
         return []
-    if asyncio.iscoroutinefunction(fn):
+    if _is_async(fn):
         return [
             LintFinding(
                 level=_LEVEL,
                 code="TITAN_LINT_003",
-                message="on_offset is an async function whose coroutine is never awaited.",
+                message="on_offset is an async callable; Titan requires a synchronous callback.",
                 hint=(
                     "on_offset must be a synchronous callable. "
-                    "Async functions passed here create a coroutine object "
-                    "that Titan calls without await, so it silently does nothing. "
-                    "Use a sync function and schedule async work separately."
+                    "Public run() and run_async() reject async callbacks before "
+                    "polling starts. Use a sync function and schedule async work separately."
                 ),
             )
         ]

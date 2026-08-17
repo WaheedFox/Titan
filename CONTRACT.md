@@ -241,10 +241,14 @@ This rule is independent of routing-key uniqueness. Two distinct Router instance
 
 - Signature: `Callable[[int], None]`
 - Must be synchronous — not a coroutine
+- Passing an async function or async callable object raises `TitanError`
+  before polling starts; no coroutine is created or discarded.
 - Called once per update, after the update has been dispatched to its chat queue and bot.offset has been updated
 - Receives the current offset value as its only argument
 - Guaranteed call order per update: update dispatched → bot.offset updated → on_offset(offset)
 - Note: dispatch means the update has been accepted and queued for processing; handler completion may follow asynchronously
+- If a synchronous callback raises, the polling loop treats it as a polling
+  error and applies its normal backoff.
 - If no on_offset is provided, offset management is entirely the developer's responsibility via bot.offset
 
 ---

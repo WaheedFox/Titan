@@ -138,6 +138,24 @@ def _validate_contract(
         )
 
 
+def validate_on_offset(func: Callable[..., Any] | None) -> None:
+    """
+    يتحقق من أن callback الخاص بالـ offset متزامن.
+
+    العقد: callable متزامن يستقبل offset واحداً. لا يدعم Titan
+    callbacks غير المتزامنة هنا لأن استدعاءها المتزامن ينشئ coroutine
+    غير مُنتظرة لكل update.
+
+    يرمي TitanError قبل بدء polling عند تمرير callable async.
+    """
+    if func is not None and _is_async(func):
+        name = _callable_name(func)
+        raise TitanError(
+            f"Invalid on_offset '{name}': async callbacks are not supported. "
+            "Use a synchronous callable and schedule async work separately."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------

@@ -32,11 +32,19 @@ Starts the polling loop. Blocks until interrupted.
 |---|---|---|
 | `debug` | `bool` | If `True`, prints each raw update to stdout |
 | `offset` | `int` | Initial update offset (useful for resuming after restart) |
-| `on_offset` | `Callable[[int], None] \| None` | Called after each update with the current offset value |
+| `on_offset` | `Callable[[int], None] \| None` | Synchronous callback called after each update with the current offset value |
+
+`on_offset` must be synchronous. Passing an async function or an async
+callable object raises `TitanError` before polling starts; Titan does not
+silently create and discard coroutines. If a synchronous callback raises,
+the polling loop treats it as a polling error and applies its normal backoff.
 
 ### `bot.run_async(debug=False, offset=0, on_offset=None)`
 
 Awaitable version of `bot.run()`. Use this when you need to control the event loop yourself.
+
+The same `on_offset` contract applies: async callbacks are rejected with
+`TitanError` before the API is started.
 
 ```python
 import asyncio

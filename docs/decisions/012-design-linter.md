@@ -117,15 +117,14 @@ Design Linter لا يُبلّغ فقط — يُعلّم. كل finding لا يو�
            Use a descriptive identifier like "confirm_delete".
 ```
 
-**TITAN_LINT_003 — Async on_offset silently ignored**
+**TITAN_LINT_003 — Async on_offset**
 
 ```
 الانتهاك:  bot.run(..., on_offset=async_fn)
-الكشف:     asyncio.iscoroutinefunction(on_offset)
-المستوى:   WARNING
-الـ hint:  on_offset must be a synchronous callable. Async functions
-           create a coroutine that is never awaited. Use a sync
-           function and schedule async work separately.
+الكشف:     inspect.iscoroutinefunction(on_offset) أو فحص __call__ للـ callable object
+المعالجة:  TitanError قبل بدء polling
+الـ hint:  on_offset must be a synchronous callable. Use a sync function
+           and schedule async work separately.
 ```
 
 #### قواعد 3ب — الحالة المجمّعة (post-registration)
@@ -178,16 +177,16 @@ src/titan/ يعرف نفسه فقط — لا يراقب كود المطور
 |---|---|---|
 | LINT_001 (command name) | عند `@bot.command(name)` | متاح دائماً |
 | LINT_002 (callback_data) | عند `@bot.callback(data)` | متاح دائماً |
-| LINT_003 (on_offset async) | عند `bot.run(..., on_offset=fn)` | غير متاح قبل `run()` |
+| LINT_003 (on_offset async) | عند `bot.run(..., on_offset=fn)` | يُرفض قبل بدء polling؛ يبقى lint فحصاً دفاعياً للحالة الداخلية |
 | LINT_010 (empty router) | عند `bot.include(router)` | متاح دائماً |
 | LINT_011 (excessive fan-out) | عند كل تسجيل handler | متاح دائماً |
 
-**قرار LINT_003:** `bot.lint()` يُعيد نتائج LINT_001/002/010/011 دائماً.
-LINT_003 تظهر فقط بعد `run()` حيث يُخزَّن `on_offset` على `self._on_offset`.
-لا خطأ، لا استثناء — القاعدة الغائبة تُهمَل بصمت.
+**قرار LINT_003:** `bot.run()` و`bot.run_async()` يرفضان async `on_offset`
+بـ `TitanError` قبل بدء polling. يبقى `bot.lint()` قادراً على الإبلاغ عن
+الحالة الدفاعية إذا وُضع callable غير صالح مباشرةً على `self._on_offset`.
 
-**مرفوض: TitanError لـ on_offset async**
-الانتهاك ليس عقداً مكسوراً (البوت يعمل). `WARNING` أصدق تمثيلاً.
+**تغيير B2:** لم يعد async `on_offset` مجرد مخالفة أسلوبية؛ لأنه يؤدي إلى
+coroutine غير مُنتظرة وإهمال حفظ offset. لذلك أصبح الرفض الفوري هو العقد.
 
 ### 7 — التصدير
 
@@ -240,9 +239,9 @@ from titan.lint import LintFinding  # إن احتاجها المستخدم لل�
 
 **تغيير بسيط في bot.py:**
 - إضافة `_included_router_objects: list[Router]` لتمكين LINT_010
-- إضافة `_on_offset` لتمكين LINT_003 post-run
+- إضافة `_on_offset` لتمكين LINT_003 كفحص دفاعي للحالة الداخلية
 - كلاهما تغيير داخلي لا يمس الـ public API
 
 **محدودية مقبولة:**
-- LINT_003 لا تُكتشف قبل `run()` — طبيعة on_offset نفسها تفرض هذا
+- public API يرفض LINT_003 قبل `run()`؛ والفحص الدفاعي متاح قبل وبعد التشغيل
 - القواعد الأعمق (anti-patterns في كود المطور) تنتظر `titan-lint` الخارجية

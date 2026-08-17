@@ -34,7 +34,12 @@ from titan.health.runner import run_checks
 from titan.inspector import BotSnapshot, build_snapshot
 from titan.links.manager import LinksManager
 from titan.privacy.registry import UserDataRegistry
-from titan.validation import validate_handler, validate_middleware, validate_error_handler
+from titan.validation import (
+    validate_handler,
+    validate_middleware,
+    validate_error_handler,
+    validate_on_offset,
+)
 from titan.lifecycle.runner import PollingRunner
 from titan.lifecycle import signals
 
@@ -588,8 +593,8 @@ class Titan:
           bot.health()  → هل البنية مكتملة؟ (ERROR/WARNING/INFO)
           bot.lint()    → هل الاتفاقيات محترمة؟ (WARNING فقط)
 
-        تعمل دائماً pre/post run() ما عدا TITAN_LINT_003 (on_offset async)
-        التي تتطلب استدعاء run() أولاً.
+        تعمل دائماً pre/post run(). يبقى TITAN_LINT_003 فحصاً دفاعياً
+        للحالة الداخلية؛ أما public API فيرفض on_offset async قبل بدء polling.
 
         مثال:
             for finding in bot.lint():
@@ -783,6 +788,7 @@ class Titan:
         offset: int = 0,
         on_offset: OffsetCallback | None = None,
     ) -> None:
+        validate_on_offset(on_offset)
         self._on_offset = on_offset
         self.offset = offset
         await self._api.start()

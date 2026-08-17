@@ -447,13 +447,15 @@ aliases.register("text", "reply")
 Choose alias names that do not conflict with existing `ctx` properties.
 
 **Passing `async def` to `on_offset`**
-`on_offset` expects a plain synchronous callable. Passing an `async def` produces a coroutine that is created and discarded on every update, with no error or warning.
+`on_offset` expects a plain synchronous callable. Passing an `async def`
+raises `TitanError` before polling starts, so Titan never creates and discards
+an un-awaited coroutine.
 
 ```python
 async def save(offset):    # wrong — async function
     ...
 
-bot.run(on_offset=save)    # coroutine is created and silently dropped each update
+bot.run(on_offset=save)    # raises TitanError before polling starts
 ```
 
 Use a plain function. If you need async work inside it, schedule it explicitly onto a running event loop.

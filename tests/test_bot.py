@@ -595,6 +595,23 @@ class TestOnOffsetOrdering:
         return bot
 
     @pytest.mark.asyncio
+    async def test_async_on_offset_is_rejected_before_polling(self):
+        """Async callbacks fail before the API is started."""
+        bot = self._make_bot_with_mocked_api([])
+
+        async def bad_offset(offset):
+            pass
+
+        with pytest.raises(
+            TitanError,
+            match="async callbacks are not supported",
+        ):
+            await bot.run_async(on_offset=bad_offset)
+
+        bot._api.start.assert_not_awaited()
+        assert bot._on_offset is None
+
+    @pytest.mark.asyncio
     async def test_offset_updated_after_dispatch(self):
         """
         bot.offset is updated after the update is dispatched to its chat queue,
@@ -652,6 +669,23 @@ class TestOnOffsetOrdering:
             pass
 
         assert received == [42]
+
+    @pytest.mark.asyncio
+    async def test_sync_on_offset_exception_uses_polling_error_path(self):
+        """Sync callback errors are handled by PollingRunner's backoff path."""
+        bot = self._make_bot_with_mocked_api([[RAW_MESSAGE_42]])
+        bot._api.get_updates = AsyncMock(
+            side_effect=[[RAW_MESSAGE_42], asyncio.CancelledError()]
+        )
+        on_offset = MagicMock(side_effect=RuntimeError("offset persistence failed"))
+
+        with patch("titan.lifecycle.runner.asyncio.sleep", new=AsyncMock()):
+            with pytest.raises(asyncio.CancelledError):
+                await bot.run_async(on_offset=on_offset)
+
+        on_offset.assert_called_once_with(42)
+        assert bot.offset == 42
+        assert bot._api.get_updates.await_count == 2
 
     @pytest.mark.asyncio
     async def test_on_offset_not_called_when_no_updates(self):
