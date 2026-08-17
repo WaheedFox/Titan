@@ -301,26 +301,16 @@ class TestErrorHandlerOverwrite:
 class TestInlineButtonWithNoAction:
     """
     سيناريو: مطور ينشئ زراً بدون callback_data ولا url.
-    الواقع: Titan لا يرمي خطأ — يُنتج dict ناقص يرفضه Telegram API.
+    الواقع المطلوب: Titan يرفض الزر محلياً قبل إرساله إلى Telegram API.
     """
 
-    def test_button_with_no_action_produces_text_only_dict(self):
-        btn = InlineButton("Click me")
-        result = btn.to_dict()
+    def test_button_with_no_action_fails_fast(self):
+        with pytest.raises(TitanError, match="exactly one action"):
+            InlineButton("Click me")
 
-        assert result == {"text": "Click me"}, (
-            "button with no action silently produces incomplete dict"
-        )
-        assert "callback_data" not in result
-        assert "url" not in result
-
-    def test_keyboard_with_actionless_button_passes_to_dict(self):
-        kb = InlineKeyboard().button("Broken button")
-        result = kb.to_dict()
-
-        rows = result["inline_keyboard"]
-        assert len(rows) == 1
-        assert rows[0][0] == {"text": "Broken button"}
+    def test_keyboard_with_actionless_button_fails_fast(self):
+        with pytest.raises(TitanError, match="exactly one action"):
+            InlineKeyboard().button("Broken button")
 
 
 # ─────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import pytest
+from titan.errors import TitanError
 from titan.keyboard import InlineButton, InlineKeyboard
 
 
@@ -13,17 +14,13 @@ class TestInlineButton:
         d = btn.to_dict()
         assert d == {"text": "Link", "url": "https://example.com"}
 
-    def test_text_only(self):
-        btn = InlineButton("Plain")
-        d = btn.to_dict()
-        assert d == {"text": "Plain"}
+    def test_no_action_is_rejected(self):
+        with pytest.raises(TitanError, match="exactly one action"):
+            InlineButton("Plain")
 
-    def test_both_callback_and_url(self):
-        btn = InlineButton("Both", callback_data="cb", url="https://x.com")
-        d = btn.to_dict()
-        assert d["callback_data"] == "cb"
-        assert d["url"] == "https://x.com"
-        assert d["text"] == "Both"
+    def test_both_actions_are_rejected(self):
+        with pytest.raises(TitanError, match="exactly one action"):
+            InlineButton("Both", callback_data="cb", url="https://x.com")
 
 
 class TestInlineKeyboard:
@@ -78,6 +75,18 @@ class TestInlineKeyboard:
         d = kb.to_dict()
         assert d["inline_keyboard"][0][0]["url"] == "https://example.com"
 
+    def test_builder_rejects_button_without_action(self):
+        kb = InlineKeyboard()
+        with pytest.raises(TitanError, match="exactly one action"):
+            kb.button("Broken")
+        assert kb.to_dict() == {"inline_keyboard": []}
+
+    def test_builder_rejects_button_with_both_actions(self):
+        kb = InlineKeyboard()
+        with pytest.raises(TitanError, match="exactly one action"):
+            kb.button("Ambiguous", callback_data="cb", url="https://x.com")
+        assert kb.to_dict() == {"inline_keyboard": []}
+
     def test_empty_keyboard(self):
         kb = InlineKeyboard()
         d = kb.to_dict()
@@ -89,4 +98,4 @@ class TestInlineKeyboard:
 
     def test_button_returns_self(self):
         kb = InlineKeyboard().row()
-        assert kb.button("X") is kb
+        assert kb.button("X", callback_data="x") is kb

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from titan.errors import TitanError
+
 
 class InlineButton:
     """
@@ -22,6 +24,8 @@ class InlineButton:
     - text: نص الزر
     - callback_data: البيانات التي تُرسل عند الضغط (لـ @bot.callback)
     - url: رابط يُفتح عند الضغط
+
+    يجب توفير إجراء واحد مدعوم بالضبط: `callback_data` أو `url`.
     """
 
     def __init__(
@@ -31,6 +35,12 @@ class InlineButton:
         callback_data: str | None = None,
         url: str | None = None,
     ) -> None:
+        if (callback_data is None) == (url is None):
+            raise TitanError(
+                "InlineButton requires exactly one action: "
+                "'callback_data' or 'url'."
+            )
+
         self.text = text
         self.callback_data = callback_data
         self.url = url
@@ -96,12 +106,15 @@ class InlineKeyboard:
         - text: نص الزر
         - callback_data: البيانات التي تُرسل عند الضغط (لـ @bot.callback)
         - url: رابط يُفتح عند الضغط
+
+        يجب توفير إجراء واحد مدعوم بالضبط: `callback_data` أو `url`.
         """
+
+        btn = InlineButton(text, callback_data=callback_data, url=url)
 
         if not self._rows:
             self._rows.append([])
 
-        btn = InlineButton(text, callback_data=callback_data, url=url)
         self._rows[-1].append(btn)
         return self
 

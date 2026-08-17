@@ -31,7 +31,9 @@ Adds a button to the current row. Returns `self`.
 | `callback_data` | `str \| None` | Payload sent to your bot when the button is pressed |
 | `url` | `str \| None` | URL opened in the browser when the button is pressed |
 
-A button should have either `callback_data` or `url`, not both. Telegram defines them as mutually exclusive — if both are provided, behaviour is determined by Telegram, not Titan.
+A button must have exactly one supported action: either `callback_data` or `url`.
+Titan raises `TitanError` immediately if neither action or both actions are
+provided, before any request is sent to Telegram.
 
 ### `.to_dict()`
 
@@ -56,6 +58,9 @@ from titan import InlineButton
 | `text` | `str` | Label displayed on the button |
 | `callback_data` | `str \| None` | Payload sent to your bot when pressed |
 | `url` | `str \| None` | URL opened when pressed |
+
+Exactly one of `callback_data` and `url` is required. Constructing an
+`InlineButton` with neither or both raises `TitanError`.
 
 ### `.to_dict()`
 

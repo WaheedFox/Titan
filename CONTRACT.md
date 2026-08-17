@@ -88,6 +88,16 @@ btn: InlineButton = InlineButton(text="نعم", callback_data="yes")
 
 كلا المسارين ينتجان نفس الكائن. لا فرق في السلوك.
 
+يجب أن يحتوي الزر على إجراء مدعوم واحد بالضبط:
+
+- `callback_data` فقط — مقبول.
+- `url` فقط — مقبول.
+- غياب كليهما — يرفع `TitanError` عند الإنشاء.
+- وجود كليهما — يرفع `TitanError` عند الإنشاء.
+
+ينطبق هذا التحقق على الإنشاء المباشر وعلى `InlineKeyboard.button()`،
+ويحدث قبل إنشاء payload أو إرسال أي طلب إلى Telegram.
+
 ---
 
 # 2. Core Principle
