@@ -260,6 +260,58 @@ This rule is independent of routing-key uniqueness. Two distinct Router instance
   error and applies its normal backoff.
 - If no on_offset is provided, offset management is entirely the developer's responsibility via bot.offset
 
+### Lifecycle Ownership and Shutdown
+
+These rules apply to updates accepted by the `run()` / `run_async()` polling
+engine:
+
+- An update is **accepted** when Titan has either placed it on its per-chat
+  dispatch queue or created the direct handler task for an update without a
+  chat. Once accepted, the update is Titan's responsibility even if its handler
+  has not started or completed.
+- Lifecycle ownership includes every chat worker and every update-handler task
+  created as a consequence of polling, for both the per-chat and direct-update
+  paths. Titan owns those tasks until they finish, are cancelled, and their
+  results or exceptions have been observed.
+- `feed_update()` is a separate direct-processing entrypoint. The caller owns
+  the coroutine used to call it; work started by that caller is not part of the
+  polling lifecycle contract.
+- Per-chat dispatch-start order remains FIFO. Handler completion order remains
+  concurrent and is not guaranteed.
+
+When polling stops, shutdown follows this order:
+
+1. Titan stops accepting new updates from polling.
+2. Existing per-chat queues are allowed to reach their shutdown sentinel in
+   arrival order. No update accepted before the stop is silently removed from
+   the queue.
+3. Titan gives already accepted handler tasks a bounded opportunity to finish.
+   Handler tasks that remain unfinished after that grace period are cancelled.
+4. Titan waits for every lifecycle-owned worker and handler task to finish
+   cleanup and observes every task result or exception.
+5. Only after that cleanup does Titan close the Telegram API session.
+
+The grace-period duration is an internal lifecycle tuning value, not a public
+API or a developer-configurable promise in v1. The policy is fixed: shutdown
+must be bounded and may cancel in-flight handlers; it does not guarantee that
+an in-flight handler completes after shutdown begins.
+
+Cancellation semantics:
+
+- Cancelling `run_async()` stops polling and runs the same ownership cleanup.
+- The original `asyncio.CancelledError` remains observable by the caller after
+  cleanup.
+- Cancellation of an in-flight handler during shutdown is expected lifecycle
+  control, not an error to be sent to the user error handler.
+- A pending `AskManager` interaction is not persistent across shutdown. If its
+  owning handler is cancelled, the pending interaction is cancelled and
+  cleaned up according to the existing `AskManager` contract.
+
+Non-cancellation failures in lifecycle-owned handler tasks must be observed and
+reported through Titan's existing error semantics exactly once. Shutdown must
+never return with an unobserved lifecycle-owned task or before the API session
+is safe to close.
+
 ---
 
 # 9. Alias Layer — titan.extras only
