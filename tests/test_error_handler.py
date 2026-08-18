@@ -95,6 +95,30 @@ class TestErrorHandlerRegistration:
         assert self.bot._error_handler is second
 
     @pytest.mark.asyncio
+    async def test_last_registration_handles_subsequent_errors(self):
+        first_calls = []
+        second_calls = []
+        error = RuntimeError("handled by the latest registration")
+
+        async def first(ctx, exc):
+            first_calls.append(exc)
+
+        async def second(ctx, exc):
+            second_calls.append(exc)
+
+        self.bot.error_handler(first)
+        self.bot.error_handler(second)
+
+        @self.bot.on("message")
+        async def bad(ctx):
+            raise error
+
+        await self.bot._handle_update(RAW_MESSAGE)
+
+        assert first_calls == []
+        assert second_calls == [error]
+
+    @pytest.mark.asyncio
     async def test_no_error_no_handler_called(self):
         called = []
 

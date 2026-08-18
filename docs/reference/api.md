@@ -364,7 +364,10 @@ async def on_error(ctx, exc):
 
 If no error handler is registered, the exception is printed to stdout and execution continues. If the error handler itself raises, that exception is also printed to stdout and does not propagate.
 
-Only one error handler can be registered per bot instance. Registering a second replaces the first.
+Only one error handler can be registered per bot instance. Registering a second
+replaces the first: the last registration handles subsequent unhandled
+exceptions. This is intentional and does not emit a warning or raise
+`TitanError`.
 
 ---
 

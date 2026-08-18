@@ -431,7 +431,9 @@ Causes every handler to execute twice. Titan does not detect this. Rule: call `n
 Registers successfully but never matches any update. The correct form is `"start"` without the slash.
 
 **Registering `error_handler` more than once**
-Only the last registration is kept — the first is silently replaced. No warning is issued.
+Titan keeps one error-handler slot per bot. The last registration replaces the
+previous one and handles subsequent unhandled exceptions. This is intentional;
+no warning or exception is issued.
 
 **`InlineButton` with neither `callback_data` nor `url`**
 Titan accepts the button. Telegram API will reject the message when it is sent.

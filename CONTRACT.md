@@ -197,6 +197,15 @@ Direct assignment (`bot.commands = {}`) or direct mutation (`bot.commands["x"] =
 
 Use `@bot.command()`, `@bot.on()`, `@bot.callback()`, and `bot.include(router)` as the only supported registration paths.
 
+### Error-handler registration
+
+Each bot instance has exactly one error-handler slot.
+
+- `@bot.error_handler` and `bot.error_handler(fn)` use the same slot.
+- Registering another error handler replaces the previous one.
+- The last registration is the handler used for subsequent unhandled exceptions.
+- This replacement is intentional and does not emit a warning or raise `TitanError`.
+
 ### Fan-Out Registration
 
 `@bot.on(event)` does not define a routing key.
