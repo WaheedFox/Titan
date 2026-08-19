@@ -80,10 +80,12 @@ class TestPollingRunnerDispatch:
         raw = _make_raw(1)
         cancelled = asyncio.CancelledError()
         lifecycle = LifecycleRegistry()
+        handle_update = AsyncMock()
 
         runner = _make_runner(
             updates_sequence=[[raw], cancelled],
             chat_id_from_raw=lambda r: None,
+            handle_update=handle_update,
             lifecycle=lifecycle,
         )
 
@@ -93,6 +95,12 @@ class TestPollingRunnerDispatch:
         await asyncio.sleep(0)
         assert len(lifecycle.tasks) == 1
         assert lifecycle.handler_tasks == lifecycle.tasks
+        task = next(iter(lifecycle.handler_tasks))
+        assert task.get_name() == "titan-update-1"
+
+        await task
+        handle_update.assert_awaited_once_with(raw)
+        assert task.done()
 
     @pytest.mark.asyncio
     async def test_update_without_chat_creates_direct_task(self):
