@@ -15,6 +15,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from titan.bot import Titan
+from titan.lifecycle.registry import LifecycleRegistry
 
 
 # ─────────────────────────────────────────────
@@ -50,6 +51,20 @@ def make_callback(data="yes", user_id=1, chat_id=100, update_id=1):
 
 def make_bot():
     return Titan("fake-token")
+
+
+@pytest.fixture
+async def lifecycle_registry():
+    registry = LifecycleRegistry()
+    try:
+        yield registry
+    finally:
+        tasks = list(registry.tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # ─────────────────────────────────────────────
@@ -104,7 +119,7 @@ class TestChatIdFromRaw:
 class TestChatIsolation:
 
     @pytest.mark.asyncio
-    async def test_slow_chat_does_not_block_fast_chat(self):
+    async def test_slow_chat_does_not_block_fast_chat(self, lifecycle_registry):
         """
         محادثة تحتوي على handler بطيء لا تحجب محادثة أخرى.
         """
@@ -118,8 +133,8 @@ class TestChatIsolation:
             order.append(ctx.chat_id)
 
         # أنشئ worker tasks لـ chat 100 و chat 200
-        queue_100 = bot._ensure_chat_worker(100)
-        queue_200 = bot._ensure_chat_worker(200)
+        queue_100 = bot._ensure_chat_worker(100, lifecycle_registry)
+        queue_200 = bot._ensure_chat_worker(200, lifecycle_registry)
 
         await queue_100.put(make_message(chat_id=100, update_id=1))
         await queue_200.put(make_message(chat_id=200, update_id=2))
@@ -134,15 +149,15 @@ class TestChatIsolation:
             "fast chat (200) should complete before slow chat (100)"
 
     @pytest.mark.asyncio
-    async def test_each_chat_gets_independent_queue(self):
+    async def test_each_chat_gets_independent_queue(self, lifecycle_registry):
         bot = make_bot()
-        q100 = bot._ensure_chat_worker(100)
-        q200 = bot._ensure_chat_worker(200)
-        q100_again = bot._ensure_chat_worker(100)
+        q100 = bot._ensure_chat_worker(100, lifecycle_registry)
+        q200 = bot._ensure_chat_worker(200, lifecycle_registry)
+        q100_again = bot._ensure_chat_worker(100, lifecycle_registry)
 
         assert q100 is q100_again,  "same chat must return same queue"
         assert q100 is not q200,    "different chats must have different queues"
-        assert len(bot._chat_workers) == 2
+        assert len(lifecycle_registry.chat_workers) == 2
 
 
 # ─────────────────────────────────────────────
@@ -152,7 +167,7 @@ class TestChatIsolation:
 class TestChatFIFO:
 
     @pytest.mark.asyncio
-    async def test_dispatch_order_preserved_within_chat(self):
+    async def test_dispatch_order_preserved_within_chat(self, lifecycle_registry):
         """
         تحقق أن كل update يبدأ dispatch بنفس الترتيب الذي وصل.
         """
@@ -163,7 +178,7 @@ class TestChatFIFO:
         async def handler(ctx):
             dispatch_order.append(ctx.message.raw.get("message_id"))
 
-        queue = bot._ensure_chat_worker(100)
+        queue = bot._ensure_chat_worker(100, lifecycle_registry)
         for i in range(1, 6):
             await queue.put(make_message(chat_id=100, update_id=i,
                                          text=f"msg {i}"))
@@ -181,7 +196,7 @@ class TestChatFIFO:
 class TestAskNonBlocking:
 
     @pytest.mark.asyncio
-    async def test_ask_resolves_via_chat_worker(self):
+    async def test_ask_resolves_via_chat_worker(self, lifecycle_registry):
         """
         ask() يجب أن تنحل عندما تصل reply update عبر نفس الـ chat worker،
         بدون deadlock.
@@ -211,7 +226,7 @@ class TestAskNonBlocking:
         # الـ reply update (من نفس المستخدم، نفس الـ chat)
         r_update = make_message("Titan", user_id=1, chat_id=100, update_id=2)
 
-        queue = bot._ensure_chat_worker(100)
+        queue = bot._ensure_chat_worker(100, lifecycle_registry)
         await queue.put(q_update)
         # نعطي الـ question handler فرصة ليسجّل الـ Future
         await asyncio.sleep(0.05)
@@ -226,7 +241,7 @@ class TestAskNonBlocking:
         assert received == ["Titan"], f"expected ['Titan'], got {received}"
 
     @pytest.mark.asyncio
-    async def test_ask_in_one_chat_does_not_affect_another(self):
+    async def test_ask_in_one_chat_does_not_affect_another(self, lifecycle_registry):
         """
         ask() معلّق في chat 100 لا يمنع chat 200 من المعالجة الطبيعية.
         """
@@ -253,8 +268,8 @@ class TestAskNonBlocking:
             else:
                 chat200_processed.append(ctx.chat_id)
 
-        q100 = bot._ensure_chat_worker(100)
-        q200 = bot._ensure_chat_worker(200)
+        q100 = bot._ensure_chat_worker(100, lifecycle_registry)
+        q200 = bot._ensure_chat_worker(200, lifecycle_registry)
 
         await q100.put(make_message("/start", chat_id=100, update_id=1))
         await asyncio.sleep(0.05)  # دع chat 100 يبلغ مرحلة ask()

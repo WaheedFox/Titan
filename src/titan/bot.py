@@ -40,6 +40,7 @@ from titan.validation import (
     validate_error_handler,
     validate_on_offset,
 )
+from titan.lifecycle.registry import LifecycleRegistry
 from titan.lifecycle.runner import PollingRunner
 from titan.lifecycle import signals
 
@@ -124,14 +125,6 @@ class Titan:
         self._reserved_commands: dict[str, Handler] = {}
 
         self.offset: int = 0
-
-        # Per-chat dispatch queues and workers.
-        # Each chat_id gets its own asyncio.Queue and a dedicated worker Task.
-        # Updates within a chat are dispatched in arrival order (FIFO).
-        # Handlers within the same chat may run concurrently if they suspend
-        # (e.g. while waiting for ask() to resolve a pending Future).
-        self._chat_queues: dict[int, asyncio.Queue] = {}
-        self._chat_workers: dict[int, asyncio.Task] = {}
 
         # Message Links Protocol — يُهيَّأ تلقائياً، لا opt-in.
         self.links = LinksManager()
@@ -743,22 +736,26 @@ class Titan:
             return (msg.get("chat") or {}).get("id")
         return None
 
-    def _ensure_chat_worker(self, chat_id: int) -> "asyncio.Queue[dict | None]":
+    def _ensure_chat_worker(
+        self,
+        chat_id: int,
+        lifecycle: LifecycleRegistry,
+    ) -> "asyncio.Queue[dict | None]":
         """
         Return the dispatch queue for *chat_id*, creating a worker Task
-        on first access.  The worker persists for the lifetime of run_async.
+        on first access within the current polling run.
         """
-        if chat_id not in self._chat_queues:
-            queue: asyncio.Queue = asyncio.Queue()
-            self._chat_queues[chat_id] = queue
-            task = asyncio.create_task(
-                self._chat_worker(chat_id, queue),
-                name=f"titan-chat-{chat_id}",
-            )
-            self._chat_workers[chat_id] = task
-        return self._chat_queues[chat_id]
+        return lifecycle.ensure_chat_worker(
+            chat_id,
+            lambda queue: self._chat_worker(chat_id, queue, lifecycle),
+        )
 
-    async def _chat_worker(self, chat_id: int, queue: "asyncio.Queue[dict | None]") -> None:
+    async def _chat_worker(
+        self,
+        chat_id: int,
+        queue: "asyncio.Queue[dict | None]",
+        lifecycle: LifecycleRegistry,
+    ) -> None:
         """
         Worker coroutine for a single chat.
 
@@ -776,9 +773,10 @@ class Titan:
             raw = await queue.get()
             if raw is None:          # shutdown sentinel
                 break
-            asyncio.create_task(
+            lifecycle.create_task(
                 self._handle_update(raw),
                 name=f"titan-update-{raw.get('update_id')}",
+                kind="handler",
             )
 
     # -------------------------
@@ -793,6 +791,7 @@ class Titan:
         validate_on_offset(on_offset)
         self._on_offset = on_offset
         self.offset = offset
+        lifecycle = LifecycleRegistry()
         await self._api.start()
         self._log("Bot started")
 
@@ -814,9 +813,10 @@ class Titan:
             api=self._api,
             handle_update=self._handle_update,
             chat_id_from_raw=self._chat_id_from_raw,
-            ensure_chat_worker=self._ensure_chat_worker,
-            chat_queues=self._chat_queues,
-            chat_workers=self._chat_workers,
+            ensure_chat_worker=lambda chat_id: self._ensure_chat_worker(
+                chat_id, lifecycle
+            ),
+            lifecycle=lifecycle,
             log=self._log,
         )
 

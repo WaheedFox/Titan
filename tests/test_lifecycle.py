@@ -12,6 +12,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from titan.lifecycle.runner import PollingRunner
+from titan.lifecycle.registry import LifecycleRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ def _make_runner(
     ensure_chat_worker=None,
     chat_queues=None,
     chat_workers=None,
+    lifecycle=None,
 ) -> PollingRunner:
     """ينشئ PollingRunner مع mocks بسيطة."""
     api = MagicMock()
@@ -49,18 +51,19 @@ def _make_runner(
         chat_id_from_raw = lambda raw: None  # كل التحديثات بدون chat → direct task
     if ensure_chat_worker is None:
         ensure_chat_worker = MagicMock()
-    if chat_queues is None:
-        chat_queues = {}
-    if chat_workers is None:
-        chat_workers = {}
+    if lifecycle is None:
+        lifecycle = LifecycleRegistry()
+    if chat_queues is not None:
+        lifecycle.chat_queues = chat_queues
+    if chat_workers is not None:
+        lifecycle.chat_workers = chat_workers
 
     return PollingRunner(
         api=api,
         handle_update=handle_update,
         chat_id_from_raw=chat_id_from_raw,
         ensure_chat_worker=ensure_chat_worker,
-        chat_queues=chat_queues,
-        chat_workers=chat_workers,
+        lifecycle=lifecycle,
         log=lambda msg: None,
     )
 
@@ -70,6 +73,26 @@ def _make_runner(
 # ---------------------------------------------------------------------------
 
 class TestPollingRunnerDispatch:
+
+    @pytest.mark.asyncio
+    async def test_polling_tasks_are_owned_by_the_run_registry(self):
+        """المهام المباشرة تمر عبر سجل دورة polling المحلي."""
+        raw = _make_raw(1)
+        cancelled = asyncio.CancelledError()
+        lifecycle = LifecycleRegistry()
+
+        runner = _make_runner(
+            updates_sequence=[[raw], cancelled],
+            chat_id_from_raw=lambda r: None,
+            lifecycle=lifecycle,
+        )
+
+        with pytest.raises(asyncio.CancelledError):
+            await runner.run(initial_offset=0, debug=False, offset_updated=None)
+
+        await asyncio.sleep(0)
+        assert len(lifecycle.tasks) == 1
+        assert lifecycle.handler_tasks == lifecycle.tasks
 
     @pytest.mark.asyncio
     async def test_update_without_chat_creates_direct_task(self):

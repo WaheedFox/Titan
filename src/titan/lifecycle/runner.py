@@ -20,6 +20,8 @@ import asyncio
 import logging
 from typing import Any, Callable, Awaitable
 
+from titan.lifecycle.registry import LifecycleRegistry
+
 _log = logging.getLogger("titan")
 
 _BACKOFF_BASE: float = 1.0
@@ -40,7 +42,7 @@ class PollingRunner:
     - handle_update: مسار معالجة التحديثات.
     - chat_id_from_raw: استخراج chat_id من raw update.
     - ensure_chat_worker: الحصول على قائمة الـ chat أو إنشاؤها.
-    - chat_queues / chat_workers: مراجع مباشرة لحالة البوت — تُنظَّف في shutdown().
+    - lifecycle: سجل الملكية الخاص بدورة polling الحالية.
     - log: دالة تسجيل مُمرَّرة من Titan.
 
     التصميم: كل dependency صريحة — لا مشاركة حالة ضمنية مع Titan.
@@ -53,16 +55,14 @@ class PollingRunner:
         handle_update: RawUpdateHandler,
         chat_id_from_raw: ChatIdExtractor,
         ensure_chat_worker: QueueEnsurer,
-        chat_queues: dict[int, asyncio.Queue],
-        chat_workers: dict[int, asyncio.Task],
+        lifecycle: LifecycleRegistry,
         log: Callable[[str], None],
     ) -> None:
         self._api = api
         self._handle_update = handle_update
         self._chat_id_from_raw = chat_id_from_raw
         self._ensure_chat_worker = ensure_chat_worker
-        self._chat_queues = chat_queues
-        self._chat_workers = chat_workers
+        self._lifecycle = lifecycle
         self._log = log
 
     async def run(
@@ -103,9 +103,10 @@ class PollingRunner:
                     if chat_id is not None:
                         await self._ensure_chat_worker(chat_id).put(raw)
                     else:
-                        asyncio.create_task(
+                        self._lifecycle.create_task(
                             self._handle_update(raw),
                             name=f"titan-update-{update_id}",
+                            kind="handler",
                         )
 
                     current_offset = update_id
@@ -128,11 +129,11 @@ class PollingRunner:
         يُرسل sentinel (None) لكل قائمة ثم ينتظر انتهاء جميع الـ workers.
         يُنظّف chat_queues وchat_workers بعد الانتهاء.
         """
-        for queue in self._chat_queues.values():
+        for queue in self._lifecycle.chat_queues.values():
             await queue.put(None)
-        if self._chat_workers:
+        if self._lifecycle.chat_workers:
             await asyncio.gather(
-                *self._chat_workers.values(), return_exceptions=True
+                *self._lifecycle.chat_workers.values(), return_exceptions=True
             )
-        self._chat_queues.clear()
-        self._chat_workers.clear()
+        self._lifecycle.chat_queues.clear()
+        self._lifecycle.chat_workers.clear()
