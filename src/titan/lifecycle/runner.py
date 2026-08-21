@@ -26,6 +26,7 @@ _log = logging.getLogger("titan")
 
 _BACKOFF_BASE: float = 1.0
 _BACKOFF_MAX: float = 30.0
+_HANDLER_GRACE_PERIOD: float = 1.0
 
 RawUpdateHandler = Callable[[dict[str, Any]], Awaitable[None]]
 ChatIdExtractor = Callable[[dict[str, Any]], "int | None"]
@@ -124,10 +125,11 @@ class PollingRunner:
 
     async def shutdown(self) -> None:
         """
-        إغلاق نظيف لجميع الـ chat workers.
+        إغلاق نظيف لجميع المهام التي تملكها دورة polling.
 
         يُرسل sentinel (None) لكل قائمة ثم ينتظر انتهاء جميع الـ workers.
-        يُنظّف chat_queues وchat_workers بعد الانتهاء.
+        تحصل مهام المعالجة المقبولة على فترة سماح داخلية قصيرة، ثم تُلغى
+        المهام التي لم تنتهِ ويُنتظر تنظيفها وملاحظة نتائجها.
         """
         for queue in self._lifecycle.chat_queues.values():
             await queue.put(None)
@@ -135,5 +137,20 @@ class PollingRunner:
             await asyncio.gather(
                 *self._lifecycle.chat_workers.values(), return_exceptions=True
             )
+
+        handler_tasks = set(self._lifecycle.handler_tasks)
+        pending_handlers = {
+            task for task in handler_tasks if not task.done()
+        }
+        if pending_handlers:
+            _done, pending = await asyncio.wait(
+                pending_handlers,
+                timeout=_HANDLER_GRACE_PERIOD,
+            )
+            for task in pending:
+                task.cancel()
+        if handler_tasks:
+            await asyncio.gather(*handler_tasks, return_exceptions=True)
+
         self._lifecycle.chat_queues.clear()
         self._lifecycle.chat_workers.clear()
