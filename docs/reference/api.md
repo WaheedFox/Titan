@@ -362,7 +362,10 @@ async def on_error(ctx, exc):
 | `ctx` | `Context` | The context at the point of failure |
 | `exc` | `Exception` | The exception that was raised |
 
-If no error handler is registered, the exception is printed to stdout and execution continues. If the error handler itself raises, that exception is also printed to stdout and does not propagate.
+If no error handler is registered, Titan logs the exception through the
+`titan` logger with its traceback and execution continues. If the error handler
+itself raises, that exception is also logged with its traceback and does not
+propagate.
 
 Only one error handler can be registered per bot instance. Registering a second
 replaces the first: the last registration handles subsequent unhandled
