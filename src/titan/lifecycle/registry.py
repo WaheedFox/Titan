@@ -9,11 +9,13 @@ polling run.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Awaitable, Callable, Literal
 
 
 TaskKind = Literal["chat_worker", "handler"]
 WorkerFactory = Callable[["asyncio.Queue[dict | None]"], Awaitable[None]]
+_log = logging.getLogger("titan")
 
 
 class LifecycleRegistry:
@@ -37,7 +39,36 @@ class LifecycleRegistry:
         self.tasks.add(task)
         if kind == "handler":
             self.handler_tasks.add(task)
+        task.add_done_callback(self._observe_task)
         return task
+
+    def _observe_task(self, task: asyncio.Task[Any]) -> None:
+        """
+        Observe one owned task exactly once, then release its registry entries.
+
+        Handler-level exceptions are normally consumed by Titan's
+        ``_handle_update`` error contract before reaching this callback.  This
+        callback is therefore reserved for lifecycle failures that escape
+        their coroutine, preventing both silent task failures and duplicate
+        calls to the user's error handler.
+        """
+        self.tasks.discard(task)
+        self.handler_tasks.discard(task)
+
+        if task.cancelled():
+            return
+
+        exception = task.exception()
+        if exception is not None:
+            _log.error(
+                "Unhandled exception in lifecycle task %s",
+                task.get_name(),
+                exc_info=(
+                    type(exception),
+                    exception,
+                    exception.__traceback__,
+                ),
+            )
 
     def ensure_chat_worker(
         self,

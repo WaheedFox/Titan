@@ -103,6 +103,76 @@ class TestPollingRunnerDispatch:
         assert task.done()
 
     @pytest.mark.asyncio
+    async def test_completed_task_is_removed_from_registry(self):
+        """المهمة المكتملة تُزال من السجل بعد ملاحظتها."""
+        lifecycle = LifecycleRegistry()
+
+        async def successful():
+            return "ok"
+
+        task = lifecycle.create_task(
+            successful(),
+            name="titan-test-success",
+            kind="handler",
+        )
+
+        await task
+        await asyncio.sleep(0)
+
+        assert task not in lifecycle.tasks
+        assert task not in lifecycle.handler_tasks
+
+    @pytest.mark.asyncio
+    async def test_task_exception_is_logged_once_and_removed(self):
+        """استثناء المهمة يُسجّل مرة واحدة ولا يبقى غير مرصود."""
+        lifecycle = LifecycleRegistry()
+        failure = RuntimeError("lifecycle failure")
+
+        async def failing():
+            raise failure
+
+        with patch("titan.lifecycle.registry._log") as mock_log:
+            task = lifecycle.create_task(
+                failing(),
+                name="titan-test-failure",
+                kind="handler",
+            )
+            with pytest.raises(RuntimeError, match="lifecycle failure"):
+                await task
+            await asyncio.sleep(0)
+
+        assert task not in lifecycle.tasks
+        assert task not in lifecycle.handler_tasks
+        assert mock_log.error.call_count == 1
+        assert mock_log.error.call_args.args[:2] == (
+            "Unhandled exception in lifecycle task %s",
+            "titan-test-failure",
+        )
+
+    @pytest.mark.asyncio
+    async def test_cancelled_task_is_not_logged_as_failure(self):
+        """الإلغاء حالة lifecycle طبيعية ولا يُسجّل كفشل."""
+        lifecycle = LifecycleRegistry()
+
+        async def waiting():
+            await asyncio.Future()
+
+        with patch("titan.lifecycle.registry._log") as mock_log:
+            task = lifecycle.create_task(
+                waiting(),
+                name="titan-test-cancelled",
+                kind="handler",
+            )
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            await asyncio.sleep(0)
+
+        assert task not in lifecycle.tasks
+        assert task not in lifecycle.handler_tasks
+        mock_log.error.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_update_without_chat_creates_direct_task(self):
         """تحديث بدون chat_id → asyncio.create_task مباشرةً."""
         raw = _make_raw(1)
