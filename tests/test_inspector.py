@@ -428,8 +428,17 @@ class TestPublicAPIContract:
         """استيراد titan.inspector لا يسبب circular import."""
         import importlib
         import sys
-        # نُزيل المودول من الـ cache ثم نعيد استيراده
-        for key in list(sys.modules.keys()):
-            if "titan" in key:
-                del sys.modules[key]
-        import titan.inspector  # noqa: F401
+        original_modules = {
+            key: module
+            for key, module in sys.modules.items()
+            if key == "titan" or key.startswith("titan.")
+        }
+        try:
+            for key in original_modules:
+                sys.modules.pop(key, None)
+            importlib.import_module("titan.inspector")
+        finally:
+            for key in list(sys.modules):
+                if key == "titan" or key.startswith("titan."):
+                    del sys.modules[key]
+            sys.modules.update(original_modules)
