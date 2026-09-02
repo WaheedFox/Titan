@@ -702,3 +702,108 @@ class TestOnOffsetOrdering:
             pass
 
         assert received == []
+
+
+# ---------------------------------------------------------------------------
+# B2-007 — run_async lifecycle boundary
+# ---------------------------------------------------------------------------
+
+class TestB2007RunAsyncLifecycle:
+
+    @pytest.mark.asyncio
+    async def test_b2007_run_async_cancellation_remains_visible_after_cleanup(self):
+        bot = Titan("fake-token")
+        handler_started = asyncio.Event()
+        handler_cancelled = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        @bot.on("message")
+        async def handler(_ctx):
+            handler_started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                handler_cancelled.set()
+                raise
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [RAW_MESSAGE_42]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        bot._api = MagicMock()
+        bot._api.start = AsyncMock()
+        bot._api.get_me = AsyncMock(return_value={"username": "testbot"})
+        bot._api.get_updates = get_updates
+        bot._api.close = AsyncMock()
+
+        run_task = asyncio.create_task(bot.run_async())
+        await handler_started.wait()
+
+        with patch("titan.lifecycle.runner._HANDLER_GRACE_PERIOD", 0):
+            run_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run_task
+
+        assert handler_cancelled.is_set()
+        bot._api.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_b2007_api_close_happens_after_lifecycle_cleanup(self):
+        bot = Titan("fake-token")
+        handler_started = asyncio.Event()
+        grace_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        events = []
+        first_call = True
+
+        @bot.on("message")
+        async def handler(_ctx):
+            handler_started.set()
+            await release_handler.wait()
+            events.append("handler_finished")
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [RAW_MESSAGE_42]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        async def close():
+            assert events == ["handler_finished"]
+            events.append("api_close")
+
+        close_mock = AsyncMock(side_effect=close)
+        bot._api = MagicMock()
+        bot._api.start = AsyncMock()
+        bot._api.get_me = AsyncMock(return_value={"username": "testbot"})
+        bot._api.get_updates = get_updates
+        bot._api.close = close_mock
+
+        real_wait = asyncio.wait
+
+        async def observed_wait(*args, **kwargs):
+            grace_started.set()
+            return await real_wait(*args, **kwargs)
+
+        with patch("titan.lifecycle.runner.asyncio.wait", side_effect=observed_wait):
+            run_task = asyncio.create_task(bot.run_async())
+            await handler_started.wait()
+            run_task.cancel()
+            await grace_started.wait()
+
+            assert events == []
+            release_handler.set()
+
+            with pytest.raises(asyncio.CancelledError):
+                await run_task
+
+        assert events == ["handler_finished", "api_close"]
+        close_mock.assert_awaited_once()

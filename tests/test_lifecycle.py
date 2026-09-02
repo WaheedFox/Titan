@@ -390,3 +390,606 @@ class TestSignals:
             signals.uninstall(loop)  # لا استثناء
         finally:
             loop.close()
+
+
+# ---------------------------------------------------------------------------
+# B2-007 — Lifecycle Gate Tests
+# ---------------------------------------------------------------------------
+
+class TestB2007LifecycleGate:
+    """Deterministic lifecycle ownership and shutdown gates."""
+
+    @pytest.mark.asyncio
+    async def test_b2007_direct_update_task_is_registered_through_polling_path(self):
+        raw = _make_raw(701)
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+
+        async def handle_update(update):
+            handler_started.set()
+            await release_handler.wait()
+
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [raw]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        lifecycle = LifecycleRegistry()
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=lambda _raw: None,
+            ensure_chat_worker=MagicMock(),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        polling_task = asyncio.create_task(
+            runner.run(initial_offset=0, debug=False, offset_updated=None)
+        )
+        await handler_started.wait()
+
+        assert len(lifecycle.tasks) == 1
+        assert lifecycle.handler_tasks == lifecycle.tasks
+        handler_task = next(iter(lifecycle.handler_tasks))
+        assert handler_task.get_name() == "titan-update-701"
+
+        polling_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await polling_task
+
+        release_handler.set()
+        await handler_task
+        await runner.shutdown()
+
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_chat_worker_and_handler_share_registry_ownership(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+
+        @bot.on("message")
+        async def handler(_ctx):
+            handler_started.set()
+            await release_handler.wait()
+
+        queue = bot._ensure_chat_worker(702, lifecycle)
+        await queue.put(_make_raw(702, chat_id=702))
+        await handler_started.wait()
+
+        worker_task = lifecycle.chat_workers[702]
+        handler_task = next(iter(lifecycle.handler_tasks))
+
+        assert lifecycle.chat_queues[702] is queue
+        assert worker_task in lifecycle.tasks
+        assert handler_task in lifecycle.tasks
+        assert worker_task is not handler_task
+        assert worker_task.get_name() == "titan-chat-702"
+        assert handler_task.get_name() == "titan-update-702"
+
+        release_handler.set()
+        await handler_task
+
+        runner = _make_runner(
+            updates_sequence=[],
+            lifecycle=lifecycle,
+        )
+        await runner.shutdown()
+
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+        assert lifecycle.chat_queues == {}
+        assert lifecycle.chat_workers == {}
+
+    @pytest.mark.asyncio
+    async def test_b2007_polling_accepted_chat_updates_are_not_dropped_on_shutdown(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        raws = [_make_raw(703, chat_id=703), _make_raw(704, chat_id=703)]
+        accepted_ids = []
+        handled_ids = []
+        accepted = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return raws
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        @bot.on("message")
+        async def handler(ctx):
+            handled_ids.append(ctx.raw["update_id"])
+
+        def on_offset(update_id):
+            accepted_ids.append(update_id)
+            if len(accepted_ids) == len(raws):
+                accepted.set()
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        runner = PollingRunner(
+            api=api,
+            handle_update=bot._handle_update,
+            chat_id_from_raw=bot._chat_id_from_raw,
+            ensure_chat_worker=lambda chat_id: bot._ensure_chat_worker(
+                chat_id, lifecycle
+            ),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        polling_task = asyncio.create_task(
+            runner.run(initial_offset=0, debug=False, offset_updated=on_offset)
+        )
+        await accepted.wait()
+
+        # Acceptance is proved by PollingRunner's own dispatch and offset
+        # callback; the test never injects either update into a queue.
+        assert accepted_ids == [703, 704]
+
+        polling_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await polling_task
+        await runner.shutdown()
+
+        assert handled_ids == [703, 704]
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+        assert lifecycle.chat_queues == {}
+        assert lifecycle.chat_workers == {}
+
+    @pytest.mark.asyncio
+    async def test_b2007_handler_finishing_during_grace_is_not_cancelled(self):
+        raw = _make_raw(705)
+        handler_started = asyncio.Event()
+        grace_started = asyncio.Event()
+        handler_finished = asyncio.Event()
+        release_handler = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        async def handle_update(_raw):
+            handler_started.set()
+            await release_handler.wait()
+            handler_finished.set()
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [raw]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        lifecycle = LifecycleRegistry()
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=lambda _raw: None,
+            ensure_chat_worker=MagicMock(),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        polling_task = asyncio.create_task(
+            runner.run(initial_offset=0, debug=False, offset_updated=None)
+        )
+        await handler_started.wait()
+        polling_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await polling_task
+
+        real_wait = asyncio.wait
+
+        async def observed_wait(*args, **kwargs):
+            grace_started.set()
+            return await real_wait(*args, **kwargs)
+
+        with patch("titan.lifecycle.runner.asyncio.wait", side_effect=observed_wait):
+            shutdown_task = asyncio.create_task(runner.shutdown())
+            await grace_started.wait()
+            assert not handler_finished.is_set()
+            release_handler.set()
+            await shutdown_task
+
+        assert handler_finished.is_set()
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_handler_pending_after_grace_is_cancelled_and_cleaned(self):
+        raw = _make_raw(706)
+        handler_started = asyncio.Event()
+        handler_cancelled = asyncio.Event()
+        never = asyncio.Future()
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        async def handle_update(_raw):
+            handler_started.set()
+            try:
+                await never
+            except asyncio.CancelledError:
+                handler_cancelled.set()
+                raise
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [raw]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        lifecycle = LifecycleRegistry()
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=lambda _raw: None,
+            ensure_chat_worker=MagicMock(),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        polling_task = asyncio.create_task(
+            runner.run(initial_offset=0, debug=False, offset_updated=None)
+        )
+        await handler_started.wait()
+        polling_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await polling_task
+
+        with patch("titan.lifecycle.runner._HANDLER_GRACE_PERIOD", 0):
+            await runner.shutdown()
+
+        assert handler_cancelled.is_set()
+        assert never.cancelled()
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_handler_cancellation_is_not_reported_as_failure(self):
+        raw = _make_raw(707)
+        handler_started = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        async def handle_update(_raw):
+            handler_started.set()
+            await asyncio.Future()
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [raw]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        lifecycle = LifecycleRegistry()
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=lambda _raw: None,
+            ensure_chat_worker=MagicMock(),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        polling_task = asyncio.create_task(
+            runner.run(initial_offset=0, debug=False, offset_updated=None)
+        )
+        await handler_started.wait()
+        polling_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await polling_task
+
+        with patch("titan.lifecycle.registry._log") as lifecycle_log:
+            with patch("titan.lifecycle.runner._HANDLER_GRACE_PERIOD", 0):
+                await runner.shutdown()
+
+        lifecycle_log.error.assert_not_called()
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_escaped_lifecycle_exception_is_observed_once(self):
+        raw = _make_raw(708)
+        failure = RuntimeError("escaped lifecycle failure")
+        accepted = asyncio.Event()
+        observed = asyncio.Event()
+        polling_blocked = asyncio.Event()
+        first_call = True
+        accepted_ids = []
+
+        async def handle_update(_raw):
+            raise failure
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [raw]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        def on_offset(update_id):
+            accepted_ids.append(update_id)
+            accepted.set()
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        lifecycle = LifecycleRegistry()
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=lambda _raw: None,
+            ensure_chat_worker=MagicMock(),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        with patch("titan.lifecycle.registry._log") as lifecycle_log:
+            def report(*args, **kwargs):
+                observed.set()
+
+            lifecycle_log.error.side_effect = report
+            polling_task = asyncio.create_task(
+                runner.run(
+                    initial_offset=0,
+                    debug=False,
+                    offset_updated=on_offset,
+                )
+            )
+            await asyncio.wait_for(accepted.wait(), timeout=2)
+            try:
+                await asyncio.wait_for(observed.wait(), timeout=2)
+            except asyncio.TimeoutError as exc:
+                raise AssertionError(
+                    f"observer did not report; log calls={lifecycle_log.error.call_args_list}; "
+                    f"owned tasks={lifecycle.tasks}"
+                ) from exc
+
+            assert accepted_ids == [708]
+            lifecycle_log.error.assert_called_once()
+            assert lifecycle_log.error.call_args.args[:2] == (
+                "Unhandled exception in lifecycle task %s",
+                "titan-update-708",
+            )
+
+            polling_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await polling_task
+            await runner.shutdown()
+
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_handled_update_exception_is_not_reported_by_observer_again(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        failure = RuntimeError("handled update failure")
+        error_seen = asyncio.Event()
+        release_error_handler = asyncio.Event()
+        error_calls = []
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        @bot.error_handler
+        async def on_error(_ctx, exc):
+            error_calls.append(exc)
+            assert exc is failure
+            error_seen.set()
+            await release_error_handler.wait()
+
+        @bot.on("message")
+        async def handler(_ctx):
+            raise failure
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [_make_raw(709, chat_id=709)]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        runner = PollingRunner(
+            api=api,
+            handle_update=bot._handle_update,
+            chat_id_from_raw=bot._chat_id_from_raw,
+            ensure_chat_worker=lambda chat_id: bot._ensure_chat_worker(
+                chat_id, lifecycle
+            ),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        with patch("titan.lifecycle.registry._log") as lifecycle_log:
+            polling_task = asyncio.create_task(
+                runner.run(initial_offset=0, debug=False, offset_updated=None)
+            )
+            await error_seen.wait()
+
+            handler_task = next(iter(lifecycle.handler_tasks))
+            release_error_handler.set()
+            await handler_task
+
+            polling_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await polling_task
+            await runner.shutdown()
+
+            assert error_calls == [failure]
+            assert lifecycle.tasks == set()
+            assert lifecycle.handler_tasks == set()
+            lifecycle_log.error.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_b2007_shutdown_waits_for_worker_and_handler_cleanup(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        handler_started = asyncio.Event()
+        handler_finished = asyncio.Event()
+        release_handler = asyncio.Event()
+
+        @bot.on("message")
+        async def handler(_ctx):
+            handler_started.set()
+            await release_handler.wait()
+            handler_finished.set()
+
+        queue = bot._ensure_chat_worker(710, lifecycle)
+        await queue.put(_make_raw(710, chat_id=710))
+        await handler_started.wait()
+        worker_task = lifecycle.chat_workers[710]
+        worker_finished = asyncio.Event()
+        worker_task.add_done_callback(lambda _task: worker_finished.set())
+
+        runner = _make_runner(
+            updates_sequence=[],
+            lifecycle=lifecycle,
+        )
+        shutdown_task = asyncio.create_task(runner.shutdown())
+
+        await worker_finished.wait()
+        assert not shutdown_task.done()
+        assert not handler_finished.is_set()
+
+        release_handler.set()
+        await shutdown_task
+
+        assert handler_finished.is_set()
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+        assert lifecycle.chat_queues == {}
+        assert lifecycle.chat_workers == {}
+
+    @pytest.mark.asyncio
+    async def test_b2007_shutdown_final_invariant_has_no_owned_tasks_or_unobserved_exceptions(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        escaped_failure = RuntimeError("final invariant failure")
+        observed = asyncio.Event()
+        accepted = asyncio.Event()
+        accepted_ids = []
+        polling_blocked = asyncio.Event()
+        first_call = True
+
+        @bot.on("message")
+        async def handler(_ctx):
+            return None
+
+        async def handle_update(raw):
+            if raw["update_id"] == 711:
+                raise escaped_failure
+            await bot._handle_update(raw)
+
+        async def get_updates(*, offset):
+            nonlocal first_call
+            if first_call:
+                first_call = False
+                return [
+                    {"update_id": 711, "inline_query": {"id": "iq-711"}},
+                    _make_raw(712, chat_id=712),
+                ]
+            await polling_blocked.wait()
+            raise asyncio.CancelledError
+
+        def on_offset(update_id):
+            accepted_ids.append(update_id)
+            if len(accepted_ids) == 2:
+                accepted.set()
+
+        api = MagicMock()
+        api.get_updates = get_updates
+        runner = PollingRunner(
+            api=api,
+            handle_update=handle_update,
+            chat_id_from_raw=bot._chat_id_from_raw,
+            ensure_chat_worker=lambda chat_id: bot._ensure_chat_worker(
+                chat_id, lifecycle
+            ),
+            lifecycle=lifecycle,
+            log=lambda _message: None,
+        )
+
+        with patch("titan.lifecycle.registry._log") as lifecycle_log:
+            def report(*args, **kwargs):
+                observed.set()
+
+            lifecycle_log.error.side_effect = report
+            polling_task = asyncio.create_task(
+                runner.run(
+                    initial_offset=0,
+                    debug=False,
+                    offset_updated=on_offset,
+                )
+            )
+            await accepted.wait()
+            await observed.wait()
+
+            polling_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await polling_task
+            await runner.shutdown()
+
+            lifecycle_log.error.assert_called_once()
+
+        assert accepted_ids == [711, 712]
+        assert lifecycle.chat_queues == {}
+        assert lifecycle.chat_workers == {}
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_b2007_repeated_shutdown_is_safe_non_public_property(self):
+        from titan.bot import Titan
+
+        bot = Titan("fake-token")
+        lifecycle = LifecycleRegistry()
+        bot._ensure_chat_worker(713, lifecycle)
+        runner = _make_runner(updates_sequence=[], lifecycle=lifecycle)
+
+        await runner.shutdown()
+        await runner.shutdown()
+
+        assert lifecycle.chat_queues == {}
+        assert lifecycle.chat_workers == {}
+        assert lifecycle.tasks == set()
+        assert lifecycle.handler_tasks == set()
