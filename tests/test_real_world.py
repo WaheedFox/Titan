@@ -190,13 +190,13 @@ class TestEmptyStringCallbackData:
 
 
 # ─────────────────────────────────────────────
-# 4. bot.include() تطبيق جزئي عند التعارض
+# 4. bot.include() preflight يمنع التطبيق الجزئي عند التعارض
 # ─────────────────────────────────────────────
 
-class TestPartialIncludeOnConflict:
+class TestIncludePreflightOnConflict:
     """
     سيناريو: router يحتوي على handlers + أمر يتعارض مع أمر مسجل مسبقاً.
-    الواقع: handlers تُضاف أولاً، ثم TitanError تُرمى — البوت في حالة جزئية.
+    preflight يجب أن يكتشف التعارض قبل إضافة أي handler إلى البوت.
     """
 
     def test_handlers_added_before_command_conflict_raises(self):
@@ -218,13 +218,13 @@ class TestPartialIncludeOnConflict:
         with pytest.raises(TitanError):
             bot.include(router)
 
-        # المشكلة: رغم الخطأ، handler الـ message أُضيف بالفعل
-        assert router_message in bot.handlers.get("message", []), (
-            "message handler was added before the TitanError — bot is in partial state"
+        # preflight يمنع أي mutation قبل اكتشاف التعارض
+        assert router_message not in bot.handlers.get("message", []), (
+            "message handler was added before preflight completed"
         )
 
     def test_bot_remains_usable_after_partial_include(self):
-        """البوت يعمل لكن مع handlers غير مقصودة."""
+        """فشل include لا يضيف handlers غير مقصودة إلى البوت."""
         bot = make_bot()
 
         @bot.command("start")
@@ -241,8 +241,7 @@ class TestPartialIncludeOnConflict:
         with pytest.raises(TitanError):
             bot.include(router)
 
-        # unexpected_handler أصبح مسجلاً رغم الفشل الكلي للـ include
-        assert len(bot.handlers.get("message", [])) == 1
+        assert unexpected_handler not in bot.handlers.get("message", [])
 
 
 # ─────────────────────────────────────────────

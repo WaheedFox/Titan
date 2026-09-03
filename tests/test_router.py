@@ -189,3 +189,57 @@ class TestBotInclude:
         router = Router()
         result = bot.include(router)
         assert result is None
+
+    def test_preflight_checks_command_conflict_before_event_application(self):
+        bot = Titan("token")
+
+        @bot.command("start")
+        async def existing_start(ctx): ...
+
+        router = Router()
+
+        @router.on("message")
+        async def message_handler(ctx): ...
+
+        @router.command("start")
+        async def conflicting_start(ctx): ...
+
+        with pytest.raises(TitanError):
+            bot.include(router)
+
+        assert message_handler not in bot.handlers.get("message", [])
+
+    def test_preflight_checks_callback_conflict_before_command_application(self):
+        bot = Titan("token")
+
+        @bot.callback("confirm")
+        async def existing_callback(ctx): ...
+
+        router = Router()
+
+        @router.command("start")
+        async def command_handler(ctx): ...
+
+        @router.callback("confirm")
+        async def conflicting_callback(ctx): ...
+
+        with pytest.raises(TitanError):
+            bot.include(router)
+
+        assert "start" not in bot.commands
+
+    def test_preflight_validates_later_event_before_applying_earlier_event(self):
+        bot = Titan("token")
+        router = Router()
+
+        @router.on("message")
+        async def message_handler(ctx): ...
+
+        def invalid_handler(ctx): ...
+
+        router.handlers["callback"] = [invalid_handler]
+
+        with pytest.raises(TitanError, match="async"):
+            bot.include(router)
+
+        assert message_handler not in bot.handlers.get("message", [])

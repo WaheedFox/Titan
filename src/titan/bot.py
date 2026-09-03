@@ -458,6 +458,30 @@ class Titan:
         أو إذا تم تمرير نفس الـ Router مرتين.
         """
 
+        self._preflight_include(router)
+
+        for event, handlers in router.handlers.items():
+            self.handlers.setdefault(event, []).extend(handlers)
+
+        for name, handler in router.commands.items():
+            self.commands[name] = handler
+            self._command_sources[name] = "via a previously included router"
+
+        for data, handler in router.callback_handlers.items():
+            self.callback_handlers[data] = handler
+            self._callback_sources[data] = "via a previously included router"
+
+        self._included_routers.add(id(router))
+        self._included_router_objects.append(router)
+
+    def _preflight_include(self, router: Router) -> None:
+        """
+        يتحقق من كامل Router قبل بدء أي mutation في حالة Bot.
+
+        هذا المسار يقرأ Router وBot فقط. يجب أن تبقى كل التحققات هنا
+        قبل application phase حتى لا يترك include() حالة جزئية عند الفشل.
+        """
+
         if id(router) in self._included_routers:
             raise TitanError(
                 "This router has already been included. "
@@ -467,7 +491,6 @@ class Titan:
         for event, handlers in router.handlers.items():
             for handler in handlers:
                 validate_handler(handler, kind="event handler")
-            self.handlers.setdefault(event, []).extend(handlers)
 
         for name, handler in router.commands.items():
             validate_handler(handler, kind="command handler")
@@ -478,8 +501,6 @@ class Titan:
                     f"Command '{name}' conflicts on include(): already registered "
                     f"{source}. Each command can only have one handler."
                 )
-            self.commands[name] = handler
-            self._command_sources[name] = "via a previously included router"
 
         for data, handler in router.callback_handlers.items():
             validate_handler(handler, kind="callback handler")
@@ -489,11 +510,6 @@ class Titan:
                     f"Callback data '{data}' conflicts on include(): already registered "
                     f"{source}. Each callback_data value can only have one handler."
                 )
-            self.callback_handlers[data] = handler
-            self._callback_sources[data] = "via a previously included router"
-
-        self._included_routers.add(id(router))
-        self._included_router_objects.append(router)
 
     def callback(self, data: str):
         """
