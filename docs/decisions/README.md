@@ -76,3 +76,4 @@ Include only when the tradeoffs are non-obvious or worth remembering.
 | [020](020-ecosystem-layer.md) | Ecosystem Layer | Accepted |
 | [021](021-template-system.md) | Template System | Accepted |
 | [022](022-extension-system.md) | Extension System | Accepted |
+| [023](023-rich-message-content-boundary.md) | Rich Message Content Boundary | Accepted |
