@@ -7,6 +7,7 @@ from titan.keyboard import InlineKeyboard, InlineButton
 from titan.router import Router
 from titan.health.models import HealthFinding, HealthLevel
 from titan.inspector import BotSnapshot
+from titan.rich import RichContent
 
 try:
     __version__ = version("titan-framework")
@@ -23,5 +24,6 @@ __all__ = [
     "HealthFinding",
     "HealthLevel",
     "BotSnapshot",
+    "RichContent",
     "__version__",
 ]

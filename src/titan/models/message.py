@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from titan.models.rich_message import RichMessage
+
 
 class Message:
     """
@@ -39,6 +41,17 @@ class Message:
     def chat_id(self) -> int | None:
         chat = self.raw.get("chat")
         return chat.get("id") if chat else None
+
+    @property
+    def rich_message(self) -> RichMessage | None:
+        if "rich_message" not in self.raw:
+            return None
+
+        raw = self.raw.get("rich_message")
+        if raw is None:
+            return None
+
+        return RichMessage(raw)
 
     # -------------------------
     # Export

@@ -1,6 +1,7 @@
 import pytest
 from titan.models.chat import Chat
 from titan.models.message import Message
+from titan.models.rich_message import RichMessage
 from titan.models.sender import Sender
 
 
@@ -76,6 +77,52 @@ class TestMessage:
     def test_no_text(self):
         m = Message({"message_id": 1, "chat": {"id": 1}})
         assert m.text is None
+
+    def test_rich_message(self):
+        raw_rich = {"blocks": [{"future_field": {"enabled": True}}]}
+        raw = {
+            "message_id": 7,
+            "chat": {"id": 9},
+            "rich_message": raw_rich,
+        }
+        message = Message(raw)
+
+        assert isinstance(message.rich_message, RichMessage)
+        assert message.rich_message.raw is raw_rich
+        assert message.rich_message.mode == "blocks"
+        assert message.text is None
+        assert message.id == 7
+        assert message.chat_id == 9
+        assert message.to_dict() is raw
+
+    def test_no_rich_message(self):
+        assert Message({"message_id": 1}).rich_message is None
+
+    def test_none_rich_message(self):
+        assert Message({"rich_message": None}).rich_message is None
+
+
+class TestRichMessage:
+    def test_raw_mode_and_to_dict(self):
+        raw = {
+            "blocks": [{"unknown": {"kept": True}}],
+            "is_rtl": True,
+            "future_field": {"nested": ["value"]},
+        }
+        message = RichMessage(raw)
+
+        assert message.raw is raw
+        assert message.mode == "blocks"
+        assert message.raw["is_rtl"] is True
+        assert message.raw["future_field"] == {"nested": ["value"]}
+        assert message.to_dict() is raw
+
+    def test_outgoing_input_shapes_are_not_inferred_as_incoming_modes(self):
+        assert RichMessage({"html": "<b>Hello</b>"}).mode is None
+        assert RichMessage({"markdown": "**Hello**"}).mode is None
+
+    def test_unknown_incoming_shape_has_unknown_mode(self):
+        assert RichMessage({"future_field": {"value": 1}}).mode is None
 
 
 class TestSender:
