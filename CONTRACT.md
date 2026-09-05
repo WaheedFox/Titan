@@ -60,6 +60,7 @@ from titan import Router
 from titan import InlineKeyboard
 from titan import TitanError
 from titan import TelegramError
+from titan import RichContent
 ```
 
 هذا القسم يحدد سطح الاستيراد الرسمي فقط. ضمانات عامة إضافية — مثل ctx.raw وmodel.raw وmodel.to_dict() — موثَّقة في أقسامها المعنية من هذا الـ CONTRACT.
@@ -98,6 +99,33 @@ btn: InlineButton = InlineButton(text="نعم", callback_data="yes")
 ينطبق هذا التحقق على الإنشاء المباشر وعلى `InlineKeyboard.button()`،
 ويحدث قبل إنشاء payload أو إرسال أي طلب إلى Telegram.
 
+### RichContent
+
+`RichContent` قيمة public تمثل mode واحداً من outgoing rich content:
+
+```python
+from titan import RichContent
+
+RichContent.html(markup)
+RichContent.markdown(markup)
+RichContent.blocks(blocks)
+```
+
+القواعد:
+
+- كل قيمة تختار mode واحداً صراحةً: `html` أو `markdown` أو `blocks`.
+- لا يحوّل Titan HTML إلى Markdown أو العكس، ولا ينشئ parser أو canonical AST.
+- لا يوجد constructor عام يقبل payload غير محدد، ولا تُقبل `dict` عادية
+  كـ RichContent ضمن أفعال `ctx`.
+- `RichContent.blocks()` تقبل ordered `Sequence` من `Mapping` values؛ تُستبعد
+  `str` و`bytes` وmapping المفرد وone-shot iterators.
+- لا يُشترط وجود `type` في block، وتبقى empty sequences وempty mappings
+  صالحة من ناحية Titan shape. صلاحية Telegram النهائية مسؤولية Telegram.
+- unknown fields داخل block mappings محفوظة ولا يُعاد تفسيرها.
+
+`RichContent` تمثل المحتوى والتحقق الخاص به؛ لا تملك public serialization
+method ولا ترسل أو تعدل الرسائل.
+
 ---
 
 # 2. Core Principle
@@ -124,6 +152,40 @@ Rules:
 - لا وصول مباشر لـ Telegram API
 - Message / Update / Chat / Sender = data-only
 
+### RichContent in ctx actions
+
+`ctx.send()`, `ctx.reply()`, و`ctx.edit()` تقبل `str | RichContent` في
+المعامل المسمى `text`:
+
+- `str` تحافظ على text transport الحالي.
+- `RichContent` تُرسل بحسب mode الذي اختاره constructor.
+- `ctx.send(RichContent.html(...))` و
+  `ctx.send(text=RichContent.html(...))` كلاهما مدعومان.
+- اسم المعامل يبقى `text`؛ لا يوجد `content=` ولا `send_rich()` أو
+  `reply_rich()` أو `edit_rich()`.
+- `parse_mode` لا تُستخدم مع `RichContent`؛ الجمع بينهما يرفع `TitanError`
+  قبل Telegram.
+- `reply_markup` سطح مستقل ولا يصبح جزءاً من `RichContent`.
+- `None` ليست outgoing content صالحة لهذه الأفعال.
+- `ctx.edit()` تبقى callback-only.
+
+### RichContent submission boundary
+
+في أفعال `send` و`reply` و`edit` الأساسية، يثبت Titan owned
+transport-content snapshot قبل أول network await:
+
+- mutation قبل boundary قد تظهر في الطلب.
+- بعد إنشاء snapshot لا تؤثر mutation اللاحقة في input object على الطلب الجاري.
+- nested mappings/lists تصبح مستقلة عن input graph عند boundary.
+- قبل network، يجب أن تكون قيم المحتوى قابلة للتمثيل داخل snapshot
+  مستقل يملكه Titan. أي قيمة لا يستطيع request boundary materializeها
+  لهذا الطلب تُرفض بـ `TitanError` قبل network.
+- لا يعرّف هذا العقد طريقة التحويل أو protocol عاماً للقيم المخصصة؛
+  دعم أي opaque object بعينه يبقى implementation detail ما لم يوثَّق
+  بشكل مستقل.
+- خوارزمية النسخ الداخلية ليست public contract، ولا توجد
+  `RichContent.serialize()` method عامة.
+
 ### ctx.raw — Escape Hatch
 
 - ctx.raw يكشف raw JSON الكامل القادم من Telegram على مستوى الـ update
@@ -134,7 +196,7 @@ Rules:
 
 ### model.raw — Scoped Escape Hatch
 
-ينطبق على: Message.raw / Sender.raw / Chat.raw
+ينطبق على: Message.raw / Sender.raw / Chat.raw / RichMessage.raw
 
 - وجود .raw على كل نموذج مضمون وجزء من الـ contract
 - يكشف القاموس الخام المقطوع من الـ update لذلك النموذج تحديداً
@@ -144,12 +206,31 @@ Rules:
 
 ### model.to_dict() — Serialization Contract
 
-ينطبق على: Message.to_dict() / Sender.to_dict() / Chat.to_dict()
+ينطبق على: Message.to_dict() / Sender.to_dict() / Chat.to_dict() /
+RichMessage.to_dict()
 
 - وجود to_dict() على كل نموذج مضمون وجزء من الـ contract
 - الغرض منها: serialization — تحويل النموذج إلى قاموس للتسجيل أو التخزين أو التكامل مع أنظمة خارجية
 - تنفيذها اليوم يعكس .raw، لكن قد تتضمن في المستقبل حقولاً محسوبة تُضيفها Titan
 - For fields originating from Telegram, the same principle applies: Titan guarantees the method exists, not the structure of what Telegram sends.
+
+### Message.rich_message
+
+`message.rich_message` هو `RichMessage | None` ويعرض incoming rich content
+كـ data-only read model:
+
+- Rich messages تدخل message route الحالي؛ لا يوجد event أو update route جديد.
+- `Message.text` يمكن أن يكون `None` عندما لا تصل رسالة نصية.
+- `RichMessage.mode` هو mode المعروف إذا كان واضحاً؛ mode غير المعروف لا
+  يُحوّل إلى mode معروف.
+- `RichMessage.raw` يحتفظ بالـ raw rich representation، بما فيها raw block
+  mappings وunknown fields.
+- `RichMessage.to_dict()` يعيد نفس representation الواردة، ولا ينشئ
+  outgoing envelope أو text projection.
+- `RichMessage` لا تملك methods للإرسال أو التعديل أو التحويل، ولا تُقبل
+  مكان `RichContent` في أفعال outgoing بلا تحويل صريح.
+- لا يضمن `RichMessage` immutable snapshot مستقلاً عن contract الحالي
+  لـ `model.raw`.
 
 ---
 
