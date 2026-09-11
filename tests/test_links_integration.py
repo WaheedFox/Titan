@@ -15,6 +15,7 @@ from titan.bot import Titan
 from titan.ctx import Context
 from titan.update import Update
 from titan.errors import TitanError
+from titan import RichContent
 from titan.links.manager import LinksManager
 from titan.links.store import SqliteMessageStore
 
@@ -27,6 +28,12 @@ def make_ctx(raw: dict, api=None, links=None) -> Context:
     if api is None:
         api = MagicMock()
         api.send_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        api._edit_rich_message = AsyncMock(
             return_value={"ok": True, "result": {"message_id": 42}}
         )
         api._me = {"id": 1, "username": "TestBot"}
@@ -97,6 +104,24 @@ class TestCtxReplyRegistersIdentity:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_failed_rich_send_no_identity_registered(self):
+        links = make_links()
+        api = MagicMock()
+        from titan.telegram import TelegramError
+        api._send_rich_message = AsyncMock(
+            side_effect=TelegramError("rich network error")
+        )
+        api._me = {"id": 1, "username": "TestBot"}
+
+        ctx = make_ctx(RAW_MESSAGE, api=api, links=links)
+
+        with pytest.raises(TelegramError):
+            await ctx.send(RichContent.html("<b>will fail</b>"))
+
+        result = await links.get_address_for_telegram_id(200, 42)
+        assert result is None
+
+    @pytest.mark.asyncio
     async def test_identity_registration_failure_is_non_fatal(self):
         """فشل تسجيل الهوية لا يكسر ctx.reply()."""
         links = make_links()
@@ -124,6 +149,54 @@ class TestCtxSendRegistersIdentity:
             telegram_message_id=42,
         )
         assert addr is not None
+
+    @pytest.mark.asyncio
+    async def test_rich_send_registers_identity_and_archives_none_text(self):
+        links = make_links()
+        links.enable_archive()
+        ctx = make_ctx(RAW_MESSAGE, links=links)
+
+        await ctx.send(RichContent.html("<b>Rich</b>"))
+
+        address = await links.get_address_for_telegram_id(200, 42)
+        assert address is not None
+        row = links._sqlite_store._get_conn().execute(
+            "SELECT text FROM message_archive WHERE titan_id = ?",
+            (address.titan_id,),
+        ).fetchone()
+        assert row["text"] is None
+
+    @pytest.mark.asyncio
+    async def test_rich_edit_does_not_register_identity_or_archive(self):
+        links = make_links()
+        links.enable_archive()
+        raw_callback = {
+            "update_id": 2,
+            "callback_query": {
+                "id": "cq1",
+                "data": "edit",
+                "from": {"id": 55},
+                "message": {
+                    "message_id": 30,
+                    "chat": {"id": 400, "type": "group"},
+                },
+            },
+        }
+        ctx = make_ctx(raw_callback, links=links)
+
+        await ctx.edit(RichContent.markdown("**Updated**"))
+
+        assert await links.get_address_for_telegram_id(400, 42) is None
+        tables = {
+            row[0]
+            for row in links._sqlite_store._get_conn().execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "message_archive" in tables:
+            assert links._sqlite_store._get_conn().execute(
+                "SELECT COUNT(*) FROM message_archive"
+            ).fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------

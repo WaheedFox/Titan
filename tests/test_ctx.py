@@ -1,15 +1,20 @@
+import asyncio
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from titan.ctx import Context
 from titan.update import Update
 from titan.errors import TitanError
+from titan import RichContent
 
 
 def make_ctx(raw_update: dict, api=None) -> Context:
     if api is None:
         api = MagicMock()
         api.send_message = AsyncMock(return_value={"ok": True})
+        api._send_rich_message = AsyncMock(return_value={"ok": True})
         api.edit_message_text = AsyncMock(return_value={"ok": True})
+        api._edit_rich_message = AsyncMock(return_value={"ok": True})
         api.delete_message = AsyncMock(return_value={"ok": True})
         api.ban_user = AsyncMock(return_value={"ok": True})
         api.leave_chat = AsyncMock(return_value={"ok": True})
@@ -246,6 +251,254 @@ class TestContextActions:
         ctx = make_ctx(RAW_MESSAGE)
         with pytest.raises(TitanError, match=r"ctx\.edit\(\) requires an active callback_query context"):
             await ctx.edit("oops")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            (RichContent.html("<b>Hello</b>"), {"html": "<b>Hello</b>"}),
+            (RichContent.markdown("**Hello**"), {"markdown": "**Hello**"}),
+            (
+                RichContent.blocks([{"type": "paragraph", "text": "Hello"}]),
+                {"blocks": [{"type": "paragraph", "text": "Hello"}]},
+            ),
+        ],
+    )
+    async def test_send_rich_modes(self, content, expected):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        await ctx.send(content)
+
+        api._send_rich_message.assert_awaited_once_with(
+            chat_id=200,
+            rich_message=expected,
+            reply_markup=None,
+        )
+        api.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method", "content", "expected"),
+        [
+            ("reply", RichContent.html("<b>Reply</b>"), {"html": "<b>Reply</b>"}),
+            (
+                "reply",
+                RichContent.markdown("**Reply**"),
+                {"markdown": "**Reply**"},
+            ),
+            (
+                "reply",
+                RichContent.blocks([{"type": "paragraph", "text": "Reply"}]),
+                {"blocks": [{"type": "paragraph", "text": "Reply"}]},
+            ),
+        ],
+    )
+    async def test_reply_rich_modes_keep_reply_parameters(
+        self, method, content, expected
+    ):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        await getattr(ctx, method)(text=content)
+
+        api._send_rich_message.assert_awaited_once_with(
+            chat_id=200,
+            rich_message=expected,
+            reply_markup=None,
+            reply_to_message_id=10,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            (RichContent.html("<b>Updated</b>"), {"html": "<b>Updated</b>"}),
+            (
+                RichContent.markdown("**Updated**"),
+                {"markdown": "**Updated**"},
+            ),
+            (
+                RichContent.blocks([{"type": "paragraph", "text": "Updated"}]),
+                {"blocks": [{"type": "paragraph", "text": "Updated"}]},
+            ),
+        ],
+    )
+    async def test_edit_rich_modes_are_callback_only(self, content, expected):
+        api = MagicMock()
+        api._edit_rich_message = AsyncMock(return_value={"ok": True})
+        ctx = make_ctx(RAW_CALLBACK, api=api)
+
+        await ctx.edit(content)
+
+        api._edit_rich_message.assert_awaited_once_with(
+            chat_id=400,
+            message_id=30,
+            rich_message=expected,
+            reply_markup=None,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("invalid", [None, {"html": "raw"}])
+    async def test_invalid_outgoing_content_rejected_before_transport(self, invalid):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock()
+        api.send_message = AsyncMock()
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        with pytest.raises(TitanError):
+            await ctx.send(invalid)
+
+        api._send_rich_message.assert_not_awaited()
+        api.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_parse_mode_with_rich_content_rejected_before_transport(self):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock()
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        with pytest.raises(TitanError, match="parse_mode"):
+            await ctx.send(RichContent.html("<b>Hello</b>"), parse_mode="HTML")
+
+        api._send_rich_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rich_reply_markup_remains_independent(self):
+        markup = {"inline_keyboard": [[{"text": "Open", "url": "https://example.com"}]]}
+        api = MagicMock()
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        await ctx.send(RichContent.markdown("**Hello**"), reply_markup=markup)
+
+        api._send_rich_message.assert_awaited_once_with(
+            chat_id=200,
+            rich_message={"markdown": "**Hello**"},
+            reply_markup=markup,
+        )
+
+    @pytest.mark.asyncio
+    async def test_mutation_before_boundary_is_included(self):
+        blocks = [{"type": "paragraph", "text": "before"}]
+        content = RichContent.blocks(blocks)
+        blocks[0]["text"] = "after-before-boundary"
+        api = MagicMock()
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        await ctx.send(content)
+
+        assert api._send_rich_message.await_args.kwargs["rich_message"] == {
+            "blocks": [{"type": "paragraph", "text": "after-before-boundary"}]
+        }
+
+    @pytest.mark.asyncio
+    async def test_nested_none_and_tuple_are_materialized(self):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock(
+            return_value={"ok": True, "result": {"message_id": 42}}
+        )
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        await ctx.send(
+            RichContent.blocks(
+                (
+                    {
+                        "optional": None,
+                        "nested": ({"value": "kept"},),
+                    },
+                )
+            )
+        )
+
+        assert api._send_rich_message.await_args.kwargs["rich_message"] == {
+            "blocks": [
+                {
+                    "optional": None,
+                    "nested": [{"value": "kept"}],
+                }
+            ]
+        }
+
+    @pytest.mark.asyncio
+    async def test_mutation_after_boundary_does_not_change_snapshot(self):
+        blocks = [{"type": "paragraph", "text": "original"}]
+        content = RichContent.blocks(blocks)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        captured = {}
+
+        async def send_rich_message(**kwargs):
+            captured.update(kwargs)
+            entered.set()
+            await release.wait()
+            return {"ok": True, "result": {"message_id": 42}}
+
+        api = MagicMock()
+        api._send_rich_message = send_rich_message
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        task = asyncio.create_task(ctx.send(content))
+        await entered.wait()
+        blocks[0]["text"] = "mutated-after-boundary"
+        release.set()
+        await task
+
+        assert captured["rich_message"] == {
+            "blocks": [{"type": "paragraph", "text": "original"}]
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "value",
+        [
+            object(),
+            {"nested": object()},
+            {"nested": {1, 2}},
+        ],
+    )
+    async def test_unmaterializable_rich_value_rejected_before_transport(self, value):
+        api = MagicMock()
+        api._send_rich_message = AsyncMock()
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        with pytest.raises(TitanError):
+            await ctx.send(RichContent.blocks([{"value": value}]))
+
+        api._send_rich_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("nested", [False, True])
+    async def test_opaque_mapping_key_rejected_before_transport(self, nested):
+        class OpaqueKey:
+            def __hash__(self):
+                return 1
+
+        opaque_key = OpaqueKey()
+        blocks = (
+            [{"nested": {opaque_key: "value"}}]
+            if nested
+            else [{opaque_key: "value"}]
+        )
+        api = MagicMock()
+        api._send_rich_message = AsyncMock()
+        ctx = make_ctx(RAW_MESSAGE, api=api)
+
+        with pytest.raises(TitanError):
+            await ctx.send(RichContent.blocks(blocks))
+
+        api._send_rich_message.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_delete_message_calls_api(self):

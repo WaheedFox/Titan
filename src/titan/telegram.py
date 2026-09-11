@@ -174,6 +174,56 @@ class Telegram:
 
         return await self.request("editMessageText", data)
 
+    async def _send_rich_message(
+        self,
+        chat_id: int,
+        rich_message: dict[str, Any],
+        reply_markup: Any | None = None,
+        reply_to_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Send a RichContent snapshot through Telegram's rich endpoint."""
+
+        data: dict[str, Any] = {
+            "chat_id": chat_id,
+            "rich_message": rich_message,
+        }
+
+        if reply_to_message_id is not None:
+            data["reply_parameters"] = {"message_id": reply_to_message_id}
+
+        if reply_markup is not None:
+            data["reply_markup"] = (
+                reply_markup.to_dict()
+                if hasattr(reply_markup, "to_dict")
+                else reply_markup
+            )
+
+        return await self.request("sendRichMessage", data)
+
+    async def _edit_rich_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        rich_message: dict[str, Any],
+        reply_markup: Any | None = None,
+    ) -> dict[str, Any]:
+        """Edit a message using Telegram's rich_message parameter."""
+
+        data: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "rich_message": rich_message,
+        }
+
+        if reply_markup is not None:
+            data["reply_markup"] = (
+                reply_markup.to_dict()
+                if hasattr(reply_markup, "to_dict")
+                else reply_markup
+            )
+
+        return await self.request("editMessageText", data)
+
     async def delete_message(
         self,
         chat_id: int,

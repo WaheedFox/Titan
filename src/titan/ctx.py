@@ -14,6 +14,7 @@ titan.ctx
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from titan.errors import TitanError
@@ -25,6 +26,81 @@ from titan.models.sender import Sender
 from titan.models.chat import Chat
 from titan.models.message import Message
 from titan.models.permissions import ChatPermissions
+from titan.rich import RichContent
+
+
+def _materialize_rich_snapshot(value: Any) -> Any:
+    """Create an owned snapshot of a RichContent representation."""
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+
+    if isinstance(value, (bytes, bytearray)):
+        raise TitanError(
+            "RichContent contains bytes-like data that cannot be materialized "
+            "into a transport snapshot."
+        )
+
+    if isinstance(value, Mapping):
+        snapshot: dict[Any, Any] = {}
+        for key, item in value.items():
+            materialized_key = _materialize_rich_snapshot(key)
+            if isinstance(materialized_key, list):
+                materialized_key = tuple(materialized_key)
+            try:
+                snapshot[materialized_key] = _materialize_rich_snapshot(item)
+            except TypeError as exc:
+                raise TitanError(
+                    "RichContent contains a mapping key that cannot be "
+                    "materialized into an independent transport snapshot."
+                ) from exc
+        return snapshot
+
+    if isinstance(value, Sequence):
+        return [_materialize_rich_snapshot(item) for item in value]
+
+    raise TitanError(
+        "RichContent contains a value that cannot be materialized into "
+        "an independent transport snapshot."
+    )
+
+
+def _prepare_outgoing_content(
+    text: str | RichContent | None,
+    parse_mode: str | None,
+) -> dict[str, Any] | None:
+    """Validate outgoing content and snapshot RichContent before any await."""
+    if text is None:
+        raise TitanError("Outgoing content cannot be None.")
+
+    if isinstance(text, RichContent):
+        if parse_mode is not None:
+            raise TitanError(
+                "parse_mode cannot be used together with RichContent."
+            )
+
+        if text.mode in {"html", "markdown"}:
+            return {
+                text.mode: _materialize_rich_snapshot(text.representation)
+            }
+
+        if text.mode == "blocks":
+            return {
+                "blocks": _materialize_rich_snapshot(text.representation)
+            }
+
+        raise TitanError(f"Unsupported RichContent mode: {text.mode!r}.")
+
+    if isinstance(text, dict):
+        raise TitanError(
+            "Raw dict is not valid outgoing content; use RichContent."
+        )
+
+    if not isinstance(text, str):
+        raise TitanError(
+            "Outgoing content must be a string or RichContent instance."
+        )
+
+    return None
 
 # Import deferred to avoid circular — LinksManager lives in titan.links
 from typing import TYPE_CHECKING
@@ -185,7 +261,7 @@ class Context:
 
     async def reply(
         self,
-        text: str,
+        text: str | RichContent,
         parse_mode: str | None = None,
         reply_markup: Any | None = None,
     ) -> Any:
@@ -202,6 +278,7 @@ class Context:
             await ctx.reply("اختر:", reply_markup=kb)
         """
 
+        rich_message = _prepare_outgoing_content(text, parse_mode)
         chat_id = self.chat_id
         if chat_id is None:
             _log.warning(
@@ -209,20 +286,30 @@ class Context:
             )
             return None
 
-        result = await self._api.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup,
-            reply_to_message_id=self.message_id,
-        )
+        if rich_message is not None:
+            result = await self._api._send_rich_message(
+                chat_id=chat_id,
+                rich_message=rich_message,
+                reply_markup=reply_markup,
+                reply_to_message_id=self.message_id,
+            )
+            archive_text: str | None = None
+        else:
+            result = await self._api.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+                reply_to_message_id=self.message_id,
+            )
+            archive_text = text
 
-        await self._register_identity(result, text)
+        await self._register_identity(result, archive_text)
         return result
 
     async def send(
         self,
-        text: str,
+        text: str | RichContent,
         parse_mode: str | None = None,
         reply_markup: Any | None = None,
     ) -> Any:
@@ -236,6 +323,7 @@ class Context:
             await ctx.send("تم تسجيلك ✅")
         """
 
+        rich_message = _prepare_outgoing_content(text, parse_mode)
         chat_id = self.chat_id
         if chat_id is None:
             _log.warning(
@@ -243,19 +331,28 @@ class Context:
             )
             return None
 
-        result = await self._api.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup,
-        )
+        if rich_message is not None:
+            result = await self._api._send_rich_message(
+                chat_id=chat_id,
+                rich_message=rich_message,
+                reply_markup=reply_markup,
+            )
+            archive_text: str | None = None
+        else:
+            result = await self._api.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+            archive_text = text
 
-        await self._register_identity(result, text)
+        await self._register_identity(result, archive_text)
         return result
 
     async def edit(
         self,
-        text: str,
+        text: str | RichContent,
         parse_mode: str | None = None,
         reply_markup: Any | None = None,
     ) -> Any:
@@ -276,6 +373,7 @@ class Context:
                 "To send a new message instead, use ctx.reply() or ctx.send()."
             )
 
+        rich_message = _prepare_outgoing_content(text, parse_mode)
         chat_id = self.chat_id
         message_id = self.message_id
 
@@ -285,6 +383,14 @@ class Context:
                 "context — message not edited."
             )
             return None
+
+        if rich_message is not None:
+            return await self._api._edit_rich_message(
+                chat_id=chat_id,
+                message_id=message_id,
+                rich_message=rich_message,
+                reply_markup=reply_markup,
+            )
 
         return await self._api.edit_message_text(
             chat_id=chat_id,

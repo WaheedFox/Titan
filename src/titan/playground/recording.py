@@ -96,6 +96,53 @@ class RecordingTelegram:
         )
         return {"ok": True, "result": {"message_id": message_id, "chat": {"id": chat_id}, "text": text}}
 
+    async def _send_rich_message(
+        self,
+        chat_id: int,
+        rich_message: dict[str, Any],
+        reply_markup: Any | None = None,
+        reply_to_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        self._record(
+            "send_rich_message",
+            chat_id=chat_id,
+            rich_message=rich_message,
+            reply_markup=reply_markup,
+            reply_to_message_id=reply_to_message_id,
+        )
+        message_id = self._next_id()
+        return {
+            "ok": True,
+            "result": {
+                "message_id": message_id,
+                "chat": {"id": chat_id},
+                "rich_message": rich_message,
+            },
+        }
+
+    async def _edit_rich_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        rich_message: dict[str, Any],
+        reply_markup: Any | None = None,
+    ) -> dict[str, Any]:
+        self._record(
+            "edit_rich_message",
+            chat_id=chat_id,
+            message_id=message_id,
+            rich_message=rich_message,
+            reply_markup=reply_markup,
+        )
+        return {
+            "ok": True,
+            "result": {
+                "message_id": message_id,
+                "chat": {"id": chat_id},
+                "rich_message": rich_message,
+            },
+        }
+
     async def delete_message(self, chat_id: int, message_id: int) -> dict[str, Any]:
         self._record("delete_message", chat_id=chat_id, message_id=message_id)
         return {"ok": True, "result": True}

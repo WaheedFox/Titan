@@ -1,6 +1,7 @@
 import pytest
 
 from titan.bot import Titan
+from titan import RichContent
 from titan.playground import RecordingTelegram, fake_callback, fake_command, fake_message
 
 
@@ -151,6 +152,27 @@ class TestRecordingTelegram:
 
         methods = [c["method"] for c in api.calls]
         assert "answer_callback_query" in methods
+
+    @pytest.mark.asyncio
+    async def test_rich_send_is_recorded_without_network(self):
+        bot, api = make_bot()
+
+        @bot.on("message")
+        async def on_message(ctx):
+            await ctx.reply(RichContent.blocks([{"type": "paragraph", "text": "Hi"}]))
+
+        await bot.feed_update(fake_message("source"))
+
+        assert len(api.calls) == 1
+        assert api.calls[0] == {
+            "method": "send_rich_message",
+            "chat_id": 1,
+            "rich_message": {
+                "blocks": [{"type": "paragraph", "text": "Hi"}]
+            },
+            "reply_markup": None,
+            "reply_to_message_id": 1,
+        }
 
     @pytest.mark.asyncio
     async def test_unsupported_api_method_fails_clearly(self):
