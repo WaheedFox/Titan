@@ -63,10 +63,10 @@ Triggered when one or more users join a group or are added by another member.
 @bot.on("new_member")
 async def on_join(ctx):
     for member in ctx.new_members or []:
-        await ctx.send(f"Welcome, {member.get('first_name')}!")
+        await ctx.send(f"Welcome, {member.first_name or 'there'}!")
 ```
 
-`ctx.new_members` is a list of raw user dicts for everyone who joined in this update.
+`ctx.new_members` is a list of `Sender` objects for everyone who joined in this update. Use `Sender` properties such as `id`, `first_name`, and `username` instead of dictionary access.
 
 This event is routed before `on("message")`. An update that contains new members never reaches a general message handler.
 
@@ -79,11 +79,12 @@ Triggered when a user leaves a group or is removed by an admin.
 ```python
 @bot.on("left_member")
 async def on_leave(ctx):
-    name = ctx.left_member.get("first_name") if ctx.left_member else "Someone"
+    member = ctx.left_member
+    name = member.first_name if member and member.first_name else "Someone"
     await ctx.send(f"{name} has left.")
 ```
 
-`ctx.left_member` is a raw user dict for the user who left.
+`ctx.left_member` is a `Sender` object for the user who left, or `None` when the update does not contain a leaving member.
 
 Like `new_member`, this event is routed before `on("message")`.
 
