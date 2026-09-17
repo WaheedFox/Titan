@@ -380,11 +380,11 @@ Both entrypoints execute the same internal logic.
 
 ---
 
-### Documented Issues (incorrect runtime behavior)
+### Previously Fixed Issues
 
-#### `bot.include()` — partial state on conflict
+#### `bot.include()` — preflight before mutation
 
-If a `Router` contains both event handlers and a command that conflicts with an already-registered command, `bot.include()` adds the event handlers first and then raises `TitanError`. The mutation is not rolled back.
+If a `Router` contains both event handlers and a command that conflicts with an already-registered command, `bot.include()` checks the entire router before mutating bot state, then raises `TitanError` without partially adding the router.
 
 ```python
 @bot.command("start")
@@ -393,16 +393,16 @@ async def existing(ctx): ...
 router = Router()
 
 @router.on("message")
-async def handler(ctx): ...  # gets added to the bot
+async def handler(ctx): ...  # not added when preflight fails
 
 @router.command("start")
 async def conflict(ctx): ...  # causes TitanError
 
 bot.include(router)
-# TitanError is raised — but handler("message") was already added
+# TitanError is raised — no router handlers are added
 ```
 
-**How to handle it:** Check for conflicts before calling `include()`. If the error occurs, reinitialize the bot rather than continuing from the partial state.
+**How to handle it:** Fix the conflict, then retry `include()` with the corrected router.
 
 ---
 
@@ -435,18 +435,15 @@ Titan keeps one error-handler slot per bot. The last registration replaces the
 previous one and handles subsequent unhandled exceptions. This is intentional;
 no warning or exception is issued.
 
-**`InlineButton` with neither `callback_data` nor `url`**
-Titan accepts the button. Telegram API will reject the message when it is sent.
-
 **`AliasMap.register()` using a name that already exists on `ctx`**
-If the alias name matches an existing `ctx` property such as `text` or `chat_id`, that property is silently overwritten.
+`AliasMap.register()` checks the alias name against properties and methods defined on `Context` and raises `TitanError` for those conflicts. This check does not cover every instance attribute, such as `raw`, `sender`, `chat`, `message`, `permissions`, and `is_banned`.
 
 ```python
 aliases.register("text", "reply")
-# ctx.text now points to reply — the original property is gone
+# TitanError — text is an attribute on Context
 ```
 
-Choose alias names that do not conflict with existing `ctx` properties.
+Choose names that do not conflict with `Context` attributes or instance attributes.
 
 **Passing `async def` to `on_offset`**
 `on_offset` expects a plain synchronous callable. Passing an `async def`

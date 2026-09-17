@@ -374,11 +374,11 @@ asyncio.run(bot.run_async())
 
 ---
 
-### مشاكل موثَّقة (سلوك غير صحيح)
+### مشاكل سابقة تم إصلاحها
 
-#### `bot.include()` — حالة جزئية عند التعارض
+#### `bot.include()` — التحقق قبل التعديل
 
-إذا احتوى الـ `Router` على handlers وأمر يتعارض مع أمر مسجَّل مسبقاً، فإن `bot.include()` تُضيف الـ handlers أولاً ثم تُرمى `TitanError`. الـ mutation لا تُعكس.
+إذا احتوى الـ `Router` على handlers وأمر يتعارض مع أمر مسجَّل مسبقاً، فإن `bot.include()` تتحقق من التعارضات قبل أي تعديل في حالة البوت، ثم ترمي `TitanError` دون إضافة الـ Router جزئياً.
 
 ```python
 @bot.command("start")
@@ -387,16 +387,16 @@ async def existing(ctx): ...
 router = Router()
 
 @router.on("message")
-async def handler(ctx): ...  # يُضاف للبوت
+async def handler(ctx): ...  # لا يُضاف عند فشل التحقق
 
 @router.command("start")
 async def conflict(ctx): ...  # يُسبب TitanError
 
 bot.include(router)
-# TitanError مُرماة — لكن handler("message") أُضيف بالفعل
+# TitanError مُرمى — ولا تُضاف handlers الـ Router
 ```
 
-**التعامل معه:** تحقق من التعارضات قبل استدعاء `include()`. إذا وقع الخطأ، أعد تهيئة البوت بدلاً من المتابعة.
+**التعامل معه:** عالج التعارض ثم أعد محاولة `include()` بالـ Router الصحيح.
 
 ---
 
@@ -429,30 +429,27 @@ async def handler(ctx):  # لا يُنفَّذ أبداً
 ويعالج الاستثناءات غير المعالجة اللاحقة. هذا سلوك مقصود، ولا يصدر تحذيراً أو
 استثناءً.
 
-**`InlineButton` بدون `callback_data` ولا `url`**
-Titan تقبل الزر. Telegram API سترفضه عند إرسال الرسالة.
-
 **`AliasMap.register()` باسم يطابق خاصية موجودة في `ctx`**
-إذا اخترت اسماً يطابق خاصية موجودة مثل `text` أو `chat_id`، ستُكتَب الخاصية الأصلية بصمت.
+يفحص `AliasMap.register()` الاسم مقابل الخصائص والـ methods المعرفة على `Context`، ويرمي `TitanError` عند التعارض معها. هذا الفحص لا يغطي كل خصائص الـ instance مثل `raw` و`sender` و`chat` و`message` و`permissions` و`is_banned`.
 
 ```python
 aliases.register("text", "reply")
-# ctx.text الآن تُشير إلى reply — الخاصية الأصلية اختفت
+# TitanError — text خاصية موجودة في Context
 ```
 
-استخدم أسماء لا تتعارض مع خصائص `ctx` الموجودة.
+استخدم أسماء لا تتعارض مع خصائص `Context` أو خصائص الـ instance.
 
 **تمرير `async def` إلى `on_offset`**
-`on_offset` تتوقع دالة عادية (synchronous). تمرير `async def` ينتج كوروتيناً لا يُنفَّذ أبداً، بدون خطأ أو تحذير.
+`on_offset` تتوقع دالة عادية (synchronous). تمرير `async def` يرمي `TitanError` قبل بدء polling.
 
 ```python
 async def save(offset):   # خطأ — دالة async
     ...
 
-bot.run(on_offset=save)   # الكوروتين يُنشأ ويُتجاهل عند كل تحديث
+bot.run(on_offset=save)   # TitanError قبل بدء polling
 ```
 
-استخدم دالة عادية، وابدأ event loop منفصلاً إذا احتجت async داخلها.
+استخدم دالة عادية. إذا احتجت async داخلها، فجدول العمل صراحةً على event loop يعمل.
 
 ---
 
