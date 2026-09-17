@@ -283,4 +283,4 @@ Production monitoring قرار مستقل لا يُتخذ إلا إذا ظهر u
 
 **`titan.profiler` — domain منفصل، Playground-based، بدون تعديل Core.**
 
-راجع: [docs/decisions/013-performance-profiler.md](../decisions/013-performance-profiler.md)
+راجع: [docs/decisions/013-performance-profiler.md](../../decisions/013-performance-profiler.md)

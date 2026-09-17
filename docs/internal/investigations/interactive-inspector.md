@@ -1,6 +1,6 @@
 # تحقيق — Interactive Inspector
 
-**الحالة:** مكتمل — القرار في [docs/decisions/006-interactive-inspector.md](../decisions/006-interactive-inspector.md)  
+**الحالة:** مكتمل — القرار في [docs/decisions/006-interactive-inspector.md](../../decisions/006-interactive-inspector.md)
 **تاريخ:** 2026-07-08  
 **الميزة:** Interactive Inspector (#1) — الأولى في الـ Roadmap
 

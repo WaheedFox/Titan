@@ -1,6 +1,6 @@
 # تحقيق — Project Health
 
-**الحالة:** مكتمل — القرار في [docs/decisions/005-project-health.md](../decisions/005-project-health.md)  
+**الحالة:** مكتمل — القرار في [docs/decisions/005-project-health.md](../../decisions/005-project-health.md)
 **تاريخ:** 2026-07-08  
 **الميزة:** Project Health — الميزة التالية في الـ Roadmap بعد Architectural Timeline (المؤجلة)
 

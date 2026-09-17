@@ -1,6 +1,6 @@
 # تحقيق — Migration Assistant
 
-**الحالة:** مكتمل — القرار في [docs/decisions/007-migration-assistant.md](../decisions/007-migration-assistant.md)  
+**الحالة:** مكتمل — القرار في [docs/decisions/007-migration-assistant.md](../../decisions/007-migration-assistant.md)
 **تاريخ:** 2026-07-08  
 **الميزة:** Migration Assistant (#2)
 

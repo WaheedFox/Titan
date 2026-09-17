@@ -273,4 +273,4 @@ for r in search("middleware"):
 الـ output مقروء ومُهيكل في نفس الوقت — human-readable strings + structured data
 حتى تستطيع الأدوات وأنظمة AI الخارجية استهلاكه مستقبلاً.
 
-راجع: [docs/decisions/014-architect-ai.md](../decisions/014-architect-ai.md)
+راجع: [docs/decisions/014-architect-ai.md](../../decisions/014-architect-ai.md)
