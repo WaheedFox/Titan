@@ -52,20 +52,39 @@ NOT:
 
 # 1. Public API
 
+يميز Titan بين ثلاث طبقات من السطح العام:
+
+1. **Core Contractual API** — واجهات عامة يضمنها العقد الرسمي في v1.
+2. **Intentionally Public Support API** — واجهات مقصودة وقابلة للاستخدام في حالات محددة، لكنها لا تحصل تلقائياً على نفس ضمانات Core Contractual API.
+3. **Convenience Exports** — exports لتسهيل الوصول أو introspection، ولا تُعد جزءاً من Core contract لمجرد وجودها في `titan.__all__`.
+
+التصنيف هنا يحدد مستوى الضمان والاستقرار، وليس طريقة التصدير فقط.
+وجود symbol في `titan.__all__` يعني أن تصديره مقصود، لكنه لا يجعله Core Contractual API تلقائياً.
+
+## 1.1 Core Contractual API
+
 الاستيراد الرسمي المضمون في v1:
 
 ```python
 from titan import Titan
 from titan import Router
 from titan import InlineKeyboard
+from titan import InlineButton
 from titan import TitanError
 from titan import TelegramError
 from titan import RichContent
 ```
 
-هذا القسم يحدد سطح الاستيراد الرسمي فقط. ضمانات عامة إضافية — مثل ctx.raw وmodel.raw وmodel.to_dict() — موثَّقة في أقسامها المعنية من هذا الـ CONTRACT.
+هذه الأسماء هي Core Contractual API. أي تغيير في واجهتها أو سلوكها الموثق يخضع لقواعد هذا الـ CONTRACT ويُعامل كتغيير تعاقدي.
 
-أي شيء غير موثَّق في هذا الـ CONTRACT هو implementation detail وليس جزءاً من الضمان الرسمي.
+تظل الأقسام التفصيلية اللاحقة الخاصة بـ `InlineButton` و`RichContent` جزءاً من هذا القسم، وتحدد قواعد استخدامهما الحالية.
+
+هذا القسم يحدد سطح الاستيراد الرسمي لـ Core API فقط. ضمانات عامة إضافية — مثل
+`ctx.raw` و`model.raw` و`model.to_dict()` — موثَّقة في أقسامها المعنية من هذا
+الـ CONTRACT.
+
+لا يُفترض أن أي symbol آخر يصبح جزءاً من Core Contractual API لمجرد أنه قابل
+للاستيراد من `titan` أو موجود في `titan.__all__`.
 
 ### InlineButton
 
@@ -125,6 +144,44 @@ RichContent.blocks(blocks)
 
 `RichContent` تمثل المحتوى والتحقق الخاص به؛ لا تملك public serialization
 method ولا ترسل أو تعدل الرسائل.
+
+## 1.2 Intentionally Public Support API
+
+الأسماء التالية exports مقصودة وقابلة للاستخدام العام في حالات الدعم الموثقة:
+
+```python
+from titan import HealthFinding
+from titan import HealthLevel
+from titan import BotSnapshot
+```
+
+- `HealthFinding` و`HealthLevel` مرتبطان بنتيجة `bot.health()`.
+- `BotSnapshot` هو نوع الإرجاع الوصفي لـ `bot.inspect()`.
+
+هذه الأسماء ليست accidental exports، لكنها أيضاً ليست جزءاً من Core Contractual
+API. وجودها في `titan.__all__` يثبت قصد التصدير، ولا يرفعها تلقائياً إلى
+مستوى Core contract.
+
+Support API مدعومة للاستخدام في الحالات الموثقة أعلاه. هذا يعني أن المطور
+يستطيع الاعتماد على وجودها واستخدامها ضمن تلك الحالات، لكنه لا يعني أنها
+تحصل تلقائياً على نفس ضمانات الثبات الممنوحة لـ Core Contractual API.
+
+هذا القسم ليس Contract ثانياً مخفياً. وهو لا يجمّد كل تفاصيل التنفيذ، ولا يمنع
+كل تغيير مستقبلي في Support API. Support API ليست جزءاً من Core Contract،
+وأي تغيير مقصود عليها يجب أن يكون متوافقاً مع قرار المشروع ووثائقه ذات الصلة،
+دون أن يترتب على ذلك مستوى الضمان الممنوح لـ Core Contractual API.
+
+## 1.3 Convenience Exports
+
+`__version__` export مريح للوصول إلى إصدار الحزمة:
+
+```python
+from titan import __version__
+```
+
+`__version__` ليس جزءاً من Core Contractual API ولا من Intentionally Public
+Support API. وجوده في `titan.__all__` يسهّل introspection والوصول إلى metadata،
+لكنه لا يمنحه contractual stability guarantee.
 
 ---
 
