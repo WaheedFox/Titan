@@ -113,20 +113,26 @@ Access point for the Telegram adapter. Use it for operations that fall outside t
 
 → See [Telegram Adapter](#4-telegram-adapter) below.
 
-### `bot.alias(alias, target)`
+### Aliases via `AliasMap`
 
-Adds an alias for an existing `ctx` method. The original method is unchanged.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `alias` | `str` | The new name to expose on `ctx` |
-| `target` | `str` | An existing `ctx` method name |
-
-Raises `TitanError` if `target` does not exist on `ctx`.
+Core Titan does not expose `bot.alias()`. Optional aliases are provided by
+`AliasMap` from `titan.extras` and applied through middleware.
 
 ```python
-bot.alias("say", "reply")   # ctx.say() now works like ctx.reply()
+from titan.extras.alias import AliasMap
+
+aliases = AliasMap()
+aliases.register("say", "reply")
+bot.middleware(aliases.as_middleware())
+
+# ctx.say() now works like ctx.reply() inside handlers
 ```
+
+`AliasMap.register()` raises `TitanError` when the alias name matches an
+attribute defined on `Context`, or when the target does not exist on
+`Context`. This validation does not cover every per-instance attribute, so
+choose names that do not collide with either `Context` attributes or the
+instance fields used by your handlers.
 
 ---
 
