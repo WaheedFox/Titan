@@ -301,6 +301,20 @@ RichMessage.to_dict()
 
 Semantic events must not overlap with message handler.
 
+### Bot-Addressed Commands
+
+- `/command` is routed without requiring bot identity.
+- `/command@username` is routed only when `username` matches this bot's Telegram
+  username, case-insensitively.
+- Titan gets that username from `getMe`. If it is unavailable, addressed
+  commands are ignored safely; unaddressed commands continue to work.
+- A command addressed to another bot is dropped and does not reach
+  `on("message")`.
+- Titan parses only the first command token. It does not strip or rewrite the
+  original message text or its arguments in `ctx.text`.
+- An unaddressed command, or one addressed to this bot, that has no registered
+  command handler continues to fall through to `on("message")`.
+
 ### Unrouted Updates
 
 Updates that Titan does not recognise as any of its supported event types are silently dropped.

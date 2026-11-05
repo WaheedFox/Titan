@@ -188,6 +188,91 @@ class TestHandleUpdate:
         assert calls == ["start"]
 
     @pytest.mark.asyncio
+    async def test_routes_command_addressed_to_this_bot_and_preserves_arguments(self):
+        self.bot._api._me = {"username": "ThisBot"}
+        received = []
+
+        @self.bot.command("admin")
+        async def h(ctx):
+            received.append(ctx.text)
+
+        raw = {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "text": "/admin@thisbot user123",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "private"},
+            },
+        }
+        await self.bot._handle_update(raw)
+        assert received == ["/admin@thisbot user123"]
+
+    @pytest.mark.asyncio
+    async def test_ignores_command_addressed_to_another_bot(self):
+        self.bot._api._me = {"username": "ThisBot"}
+        calls = []
+
+        @self.bot.command("admin")
+        async def command_handler(ctx):
+            calls.append("command")
+
+        @self.bot.on("message")
+        async def message_handler(ctx):
+            calls.append("message")
+
+        raw = {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "text": "/admin@OtherBot",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "group"},
+            },
+        }
+        await self.bot._handle_update(raw)
+        assert calls == []
+
+    @pytest.mark.asyncio
+    async def test_targeted_command_is_ignored_when_bot_username_is_unknown(self, caplog):
+        self.bot._api._me = None
+        calls = []
+
+        @self.bot.command("admin")
+        async def command_handler(ctx):
+            calls.append("command")
+
+        @self.bot.on("message")
+        async def message_handler(ctx):
+            calls.append("message")
+
+        targeted = {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "text": "/admin@ThisBot",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "group"},
+            },
+        }
+        unaddressed = {
+            "update_id": 2,
+            "message": {
+                "message_id": 2,
+                "text": "/admin",
+                "from": {"id": 1, "username": "u"},
+                "chat": {"id": 1, "type": "group"},
+            },
+        }
+
+        with caplog.at_level("WARNING", logger="titan"):
+            await self.bot._handle_update(targeted)
+        await self.bot._handle_update(unaddressed)
+
+        assert calls == ["command"]
+        assert "username is unavailable" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_unknown_command_falls_through_to_message(self):
         calls = []
 

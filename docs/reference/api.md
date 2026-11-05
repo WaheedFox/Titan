@@ -314,6 +314,14 @@ Registers a handler for a specific command (e.g. `"start"` for `/start`). Comman
 
 Raises `TitanError` if the same command is registered twice.
 
+In group chats, Telegram commands may include a bot username, such as
+`/start@MyBot`. Titan runs the command only when that username matches this
+bot's `getMe` username, case-insensitively. Commands addressed to another bot
+are ignored rather than passed to `on("message")`. If Titan cannot determine
+its username, it safely ignores addressed commands while continuing to handle
+unaddressed commands. The original text and arguments remain available in
+`ctx.text`.
+
 ```python
 @bot.command("start")
 async def on_start(ctx):

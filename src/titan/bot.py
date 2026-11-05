@@ -339,23 +339,23 @@ class Titan:
     # -------------------------
     # Utilities
     # -------------------------
-    def _extract_command(self, text: str) -> str | None:
-        """
-        استخراج اسم الأمر من النص.
-
-        يدعم:
-        - /start
-        - /start@BotName
-        """
-
+    @staticmethod
+    def _parse_command(text: str) -> tuple[str, str | None] | None:
+        """Extract a command name and optional target username from its first token."""
         if not text.startswith("/"):
             return None
 
-        command = text.split(maxsplit=1)[0][1:]
-        if not command:
+        token = text.split(maxsplit=1)[0][1:]
+        if not token:
             return None
 
-        return command.split("@", 1)[0]
+        command, separator, target_username = token.partition("@")
+        return command, target_username if separator else None
+
+    def _extract_command(self, text: str) -> str | None:
+        """Extract a command name without its optional Telegram bot target."""
+        parsed = self._parse_command(text)
+        return parsed[0] if parsed is not None else None
 
     # -------------------------
     # Registration
@@ -702,9 +702,31 @@ class Titan:
 
             # message / command
             text = update.text
-            command = self._extract_command(text) if text else None
+            parsed_command = self._parse_command(text) if text else None
 
-            if command is not None:
+            if parsed_command is not None:
+                command, target_username = parsed_command
+
+                if target_username is not None:
+                    me = getattr(self._api, "_me", None)
+                    bot_username = (
+                        me.get("username") if isinstance(me, dict) else None
+                    )
+                    if not isinstance(bot_username, str) or not bot_username:
+                        _log.warning(
+                            "Ignoring command addressed to @%s because this bot's "
+                            "username is unavailable.",
+                            target_username,
+                        )
+                        return
+                    if target_username.casefold() != bot_username.casefold():
+                        _log.debug(
+                            "Ignoring command addressed to @%s; this bot is @%s.",
+                            target_username,
+                            bot_username,
+                        )
+                        return
+
                 handler = self.commands.get(command) or self._reserved_commands.get(command)
                 if handler is not None:
                     try:

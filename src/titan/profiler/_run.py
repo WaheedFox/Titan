@@ -90,7 +90,9 @@ async def profile_update(
 
     event_type = _infer_event_type(update)
     original_api = bot._api
-    bot._api = RecordingTelegram()
+    recording_api = RecordingTelegram()
+    recording_api._me = getattr(original_api, "_me", None)
+    bot._api = recording_api
 
     entries: list[ProfileEntry] = []
     try:

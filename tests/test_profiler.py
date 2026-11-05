@@ -246,6 +246,26 @@ class TestProfileUpdate:
         assert call_count[0] == 10
 
     @pytest.mark.asyncio
+    async def test_profile_preserves_bot_identity_for_targeted_commands(self):
+        bot = Titan("dummy-token")
+        api = RecordingTelegram(bot_username="ActualBot")
+        bot._api = api
+        bot.telegram._api = api
+        called = []
+
+        @bot.command("start")
+        async def on_start(ctx):
+            called.append(ctx.text)
+
+        update = fake_command("start")
+        update["message"]["text"] = "/start@ActualBot"
+
+        await profile_update(bot, update)
+
+        assert called == ["/start@ActualBot"]
+        assert bot._api is api
+
+    @pytest.mark.asyncio
     async def test_no_real_telegram_calls_during_profiling(self):
         """يثبت أن RecordingTelegram يُحقن — لا اتصال حقيقي بـ Telegram."""
         bot, _ = make_bot()

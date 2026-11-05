@@ -21,7 +21,11 @@ async def on_message(ctx):
     await ctx.reply("Got your message.")
 ```
 
-Commands that do not match any registered `@bot.command` handler also fall through to `on("message")`.
+Unregistered commands that are unaddressed or addressed to this bot fall
+through to `on("message")`. A command addressed to another bot is dropped
+instead of reaching either the command handler or `on("message")`. Titan
+compares the target against the bot username returned by `getMe`; if that
+username is unavailable, it safely drops addressed commands.
 
 ---
 
@@ -125,7 +129,8 @@ When an update arrives, Titan routes it in this order:
 | 3 | Update is a callback query with no matching handler | `on("callback")` |
 | 4 | Message contains new members | `on("new_member")` |
 | 5 | Message contains a leaving member | `on("left_member")` |
-| 6 | Message text starts with `/` and matches a registered command | that command handler |
-| 7 | All other messages | `on("message")` |
+| 6 | Message contains an unaddressed command, or one addressed to this bot, matching a registered command | that command handler |
+| 7 | Message contains a command addressed to another bot, or a targeted command when this bot's username is unavailable | dropped |
+| 8 | All other messages, including unregistered unaddressed or own-targeted commands | `on("message")` |
 
 Each update matches exactly one path. Titan does not fan out a single update to multiple event types.
